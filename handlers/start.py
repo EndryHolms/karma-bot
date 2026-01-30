@@ -1,6 +1,8 @@
 from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
+# 👇 ДОДАНО ІМПОРТ ПОМИЛКИ
+from aiogram.exceptions import TelegramBadRequest 
 from firebase_admin import firestore
 
 from firebase_db import ensure_user, get_balance
@@ -61,7 +63,6 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
 
     balance = await get_balance(db, callback.from_user.id)
 
-    # 👇 ОНОВЛЕНИЙ МАГІЧНИЙ ТЕКСТ 👇
     text = (
         f"<b>🧘 Твій енергетичний баланс:</b>\n"
         f"✨ Доступно зірок: <b>{balance} ⭐️</b>\n\n"
@@ -72,7 +73,12 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
     )
 
     if callback.message:
-        # Використовуємо edit_text, щоб не плодити повідомлення
-        await callback.message.edit_text(text, reply_markup=main_menu_kb())
+        # 👇 БЛОК ЗАХИСТУ ВІД ПОМИЛКИ 👇
+        try:
+            await callback.message.edit_text(text, reply_markup=main_menu_kb())
+        except TelegramBadRequest:
+            # Якщо текст не змінився, Telegram свариться. 
+            # Ми просто ігноруємо це (pass), бо для користувача нічого не змінюється.
+            pass
 
     await callback.answer()
