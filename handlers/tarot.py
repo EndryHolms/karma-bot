@@ -27,6 +27,12 @@ router = Router()
 RELATIONSHIP_PRICE = 75
 CAREER_PRICE = 100
 
+# 👇 ТЕКСТ, ЯКИЙ ДОДАЄТЬСЯ В КІНЦІ КОЖНОЇ ВІДПОВІДІ
+FOOTER_TEXT = (
+    "\n\n✨ <i>Хочеш дізнатися глибше про конкретну ситуацію? "
+    "Обери платний розклад нижче.</i>"
+)
+
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
@@ -67,9 +73,12 @@ async def _send_long(message: Message, text: str) -> None:
         await message.answer("Сталося щось дивне — я не отримала відповідь. Спробуй ще раз.")
         return
 
+    # Додаємо рекламний текст в кінці
+    final_text = text + FOOTER_TEXT
+
     limit = 3900
-    for i in range(0, len(text), limit):
-        await message.answer(text[i : i + limit])
+    for i in range(0, len(final_text), limit):
+        await message.answer(final_text[i : i + limit])
 
 
 @router.callback_query(F.data == CB_DAILY)
@@ -80,7 +89,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
     user_id = str(callback.from_user.id)
 
-    # 1. Перевіряємо/створюємо користувача
     await ensure_user(
         db,
         user_id=callback.from_user.id,
@@ -88,48 +96,57 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         first_name=callback.from_user.first_name or "",
     )
 
-    # 2. Перевірка дати
+    # Перевірка дати (без await, бо це синхронна бібліотека)
     today_str = datetime.now().strftime("%Y-%m-%d")
     
     doc_ref = db.collection("users").document(user_id)
-    
-    # 👇 ВИПРАВЛЕННЯ 1: Прибрали await
     doc = doc_ref.get()
     
     user_data = doc.to_dict() or {}
     last_run = user_data.get("last_daily_card_date")
 
-    # Якщо дата в базі збігається з сьогоднішньою — блокуємо
     if last_run == today_str:
         await callback.answer("Сьогодні ти вже отримав карту!", show_alert=True)
         if callback.message:
-            await callback.message.answer(
+             await callback.message.answer(
                 "🔮 <b>Сьогодні зірки вже промовили до тебе.</b>\n\n"
                 "Не спокушай долю частими питаннями. Обдумай отриману відповідь.\n"
                 "Приходь завтра за новою порадою. ✨"
             )
         return
 
-    # 3. Якщо все ок — генеруємо
-    await callback.answer("Читаю енергію дня…")
+    # 👇 АНІМАЦІЯ ДЛЯ КАРТИ ДНЯ 👇
+    await callback.answer()
+    
+    # 1. Створюємо повідомлення
+    msg = await callback.message.answer("🔮 <i>Запитую карту дня...</i>")
+    await asyncio.sleep(1.5) # Пауза
 
+    # 2. Редагуємо його
+    await msg.edit_text("✨ <i>Налаштовуюся на твої вібрації...</i>")
+    await asyncio.sleep(1.5)
+
+    # 3. Редагуємо ще раз
+    await msg.edit_text("🎴 <i>Тасую колоду...</i>")
+    
     prompt = "Витягни для мене карту дня і поясни енергію цього дня."
     
     try:
-        # Спробуємо використати tarot_model, якщо буде помилка - бот напише в лог
         text = await _gemini_generate_text(tarot_model, prompt)
         
-        # 👇 ВИПРАВЛЕННЯ 2: Прибрали await
+        # Оновлюємо дату (без await)
         doc_ref.update({"last_daily_card_date": today_str})
+
+        # Видаляємо повідомлення про тасування, щоб не заважало
+        await msg.delete()
 
         if callback.message:
             await _send_long(callback.message, text)
             await callback.message.answer("Обери наступну дію:", reply_markup=back_to_menu_kb())
             
     except Exception as e:
-        print(f"Error generating daily card: {e}")
-        if callback.message:
-            await callback.message.answer("Вибач, магічний ефір зараз перевантажений. Спробуй пізніше.")
+        print(f"Error: {e}")
+        await msg.edit_text("Вибач, магічний ефір зараз перевантажений. Спробуй пізніше.")
 
 
 async def _start_paid_reading(
@@ -167,6 +184,7 @@ async def _start_paid_reading(
         await increment_balance(db, callback.from_user.id, -price)
     except InsufficientBalanceError:
         await callback.answer("Недостатньо ⭐ — відкриваю оплату…")
+        # Тут можна продублювати інвойс, якщо треба
         await send_stars_invoice(
             callback=callback,
             title="Поповнення балансу Karma",
@@ -229,6 +247,11 @@ async def reading_context_message(
     if not message.from_user:
         return
 
+    # 👇 АНІМАЦІЯ ДЛЯ ПЛАТНИХ РОЗКЛАДІВ 👇
+    msg = await message.answer("✨ <i>Зчитую твій запит...</i>")
+    await asyncio.sleep(1.5)
+    await msg.edit_text("🔮 <i>Розкладаю карти...</i>")
+
     data = await state.get_data()
     reading_key = data.get("reading_key")
 
@@ -246,6 +269,7 @@ async def reading_context_message(
         topic = "кар'єра/гроші"
         extra = "Зосередься на можливостях, ризиках, ресурсах і практичних кроках."
 
+    # Обробка Voice/Text
     if message.voice:
         buf = await bot.download(message.voice.file_id)
         audio_bytes = buf.getvalue()
@@ -257,6 +281,7 @@ async def reading_context_message(
     else:
         user_text = (message.text or "").strip()
         if not user_text:
+            await msg.delete()
             await message.answer("Надішли, будь ласка, текстом або голосом — я не бачу контексту.")
             return
 
@@ -265,6 +290,9 @@ async def reading_context_message(
             f"Зроби глибоке таро-читання. {extra}"
         )
         text = await _gemini_generate_text(tarot_model, prompt)
+
+    # Видаляємо повідомлення "Розкладаю карти" перед відправкою результату
+    await msg.delete()
 
     await _send_long(message, text)
     await message.answer("Обери наступну дію:", reply_markup=back_to_menu_kb())
