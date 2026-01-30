@@ -56,13 +56,13 @@ async def main() -> None:
 
     # Модель для Таро (містична)
     tarot_model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview", # Або "gemini-1.5-flash", перевірте назву
+        model_name="gemini-1.5-flash", # Або "gemini-1.5-flash", перевірте назву
         system_instruction=KARMA_SYSTEM_PROMPT,
     )
     
     # Модель для Порад (філософська)
     advice_model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview", 
+        model_name="gemini-1.5-flash", 
         system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
     )
 
