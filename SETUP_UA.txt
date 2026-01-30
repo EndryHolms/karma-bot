@@ -1,0 +1,67 @@
+Setup / Run notes (важливо) — Karma (@karma_tarot_bot)
+
+1) Підготуй Python
+- Потрібен Python 3.10+
+- Рекомендовано створити venv у корені проєкту:
+
+  python -m venv .venv
+  .venv\Scripts\activate
+
+2) Встанови залежності
+- Встанови пакети:
+
+  pip install -U aiogram python-dotenv firebase-admin google-generativeai
+
+- (Опційно) перевір версію aiogram:
+
+  python -c "import aiogram; print(aiogram.__version__)"
+
+3) Налаштуй .env
+У файлі .env заповни:
+- BOT_TOKEN — токен з @BotFather
+- GEMINI_API_KEY — ключ Gemini (Google AI Studio)
+- FIREBASE_CRED_PATH — шлях до JSON ключа Firebase
+
+Приклад:
+BOT_TOKEN=123456:ABCDEF...
+GEMINI_API_KEY=AIzaSy...
+FIREBASE_CRED_PATH=serviceAccountKey.json
+
+4) Firebase / Firestore
+1) У Firebase Console:
+   - створи проєкт
+   - увімкни Firestore Database
+2) Згенеруй Service Account key (JSON) і:
+   - збережи як serviceAccountKey.json у корінь проєкту АБО
+   - вкажи повний шлях у FIREBASE_CRED_PATH
+
+Важливо:
+- serviceAccountKey.json не можна комітити в публічний репозиторій.
+
+5) Telegram Stars (XTR)
+- У коді використовується currency="XTR" і provider_token="" (для Stars він не потрібен).
+- Переконайся, що для бота в @BotFather увімкнені платежі / Stars.
+
+Як працює логіка:
+- Якщо балансу не вистачає — бот надсилає інвойс на потрібну кількість ⭐.
+- Після оплати successful_payment додає total_amount у Firestore поле balance.
+
+6) Запуск бота
+- Запусти:
+
+  python main.py
+
+Після запуску:
+- відкрий бота в Telegram
+- /start
+- натискай кнопки меню
+
+7) Типові проблеми
+- Missing required environment variables
+  - не заповнений .env або .env не підхопився (переконайся, що запускаєш з кореня проєкту)
+
+- Firebase: Invalid certificate / Failed to initialize
+  - неправильний шлях до serviceAccountKey.json або файл не той
+
+- Gemini 403/404 або порожня відповідь
+  - немає доступу до моделі/квоти або некоректний GEMINI_API_KEY
