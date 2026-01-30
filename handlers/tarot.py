@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
-from datetime import datetime  # <--- Додано імпорт дати
+from datetime import datetime
 from typing import Any
 
 import google.generativeai as genai
@@ -88,13 +88,15 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         first_name=callback.from_user.first_name or "",
     )
 
-    # 2. Перевірка дати (ОБМЕЖЕННЯ РАЗ НА ДЕНЬ)
+    # 2. Перевірка дати
     today_str = datetime.now().strftime("%Y-%m-%d")
     
     doc_ref = db.collection("users").document(user_id)
-    doc = await doc_ref.get()
-    user_data = doc.to_dict() or {}
     
+    # 👇 ВИПРАВЛЕННЯ 1: Прибрали await
+    doc = doc_ref.get()
+    
+    user_data = doc.to_dict() or {}
     last_run = user_data.get("last_daily_card_date")
 
     # Якщо дата в базі збігається з сьогоднішньою — блокуємо
@@ -114,10 +116,11 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     prompt = "Витягни для мене карту дня і поясни енергію цього дня."
     
     try:
+        # Спробуємо використати tarot_model, якщо буде помилка - бот напише в лог
         text = await _gemini_generate_text(tarot_model, prompt)
         
-        # 4. Записуємо дату успішного виконання
-        await doc_ref.update({"last_daily_card_date": today_str})
+        # 👇 ВИПРАВЛЕННЯ 2: Прибрали await
+        doc_ref.update({"last_daily_card_date": today_str})
 
         if callback.message:
             await _send_long(callback.message, text)
