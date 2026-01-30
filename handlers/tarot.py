@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+from datetime import datetime  # <--- Додано імпорт дати
 from typing import Any
 
 import google.generativeai as genai
@@ -77,6 +78,9 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         await callback.answer()
         return
 
+    user_id = str(callback.from_user.id)
+
+    # 1. Перевіряємо/створюємо користувача
     await ensure_user(
         db,
         user_id=callback.from_user.id,
@@ -84,14 +88,45 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         first_name=callback.from_user.first_name or "",
     )
 
+    # 2. Перевірка дати (ОБМЕЖЕННЯ РАЗ НА ДЕНЬ)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    doc_ref = db.collection("users").document(user_id)
+    doc = await doc_ref.get()
+    user_data = doc.to_dict() or {}
+    
+    last_run = user_data.get("last_daily_card_date")
+
+    # Якщо дата в базі збігається з сьогоднішньою — блокуємо
+    if last_run == today_str:
+        await callback.answer("Сьогодні ти вже отримав карту!", show_alert=True)
+        if callback.message:
+            await callback.message.answer(
+                "🔮 <b>Сьогодні зірки вже промовили до тебе.</b>\n\n"
+                "Не спокушай долю частими питаннями. Обдумай отриману відповідь.\n"
+                "Приходь завтра за новою порадою. ✨"
+            )
+        return
+
+    # 3. Якщо все ок — генеруємо
     await callback.answer("Читаю енергію дня…")
 
     prompt = "Витягни для мене карту дня і поясни енергію цього дня."
-    text = await _gemini_generate_text(tarot_model, prompt)
+    
+    try:
+        text = await _gemini_generate_text(tarot_model, prompt)
+        
+        # 4. Записуємо дату успішного виконання
+        await doc_ref.update({"last_daily_card_date": today_str})
 
-    if callback.message:
-        await _send_long(callback.message, text)
-        await callback.message.answer("Обери наступну дію:", reply_markup=back_to_menu_kb())
+        if callback.message:
+            await _send_long(callback.message, text)
+            await callback.message.answer("Обери наступну дію:", reply_markup=back_to_menu_kb())
+            
+    except Exception as e:
+        print(f"Error generating daily card: {e}")
+        if callback.message:
+            await callback.message.answer("Вибач, магічний ефір зараз перевантажений. Спробуй пізніше.")
 
 
 async def _start_paid_reading(
