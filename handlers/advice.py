@@ -9,28 +9,30 @@ from firebase_admin import firestore
 
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance
 from handlers.payment import send_stars_invoice
-from keyboards import CB_ADVICE, back_to_menu_kb
+# Імпортуємо кнопки, щоб в кінці показати меню
+from keyboards import CB_ADVICE, main_menu_kb
 
 router = Router()
 
 ADVICE_PRICE = 25
 
+# 👇 ВСТАВТЕ СЮДИ СВІЙ ID
+ADMIN_IDS = [469764985] 
 
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
     def _call_sync() -> str:
         resp = model.generate_content(prompt)
         text = getattr(resp, "text", None)
         return (text or "").strip()
-
     return await asyncio.to_thread(_call_sync)
 
-
 @router.callback_query(F.data == CB_ADVICE)
-async def universe_advice(callback: CallbackQuery, db: firestore.Client, advice_model: Any) -> None:
+async def get_advice(callback: CallbackQuery, db: firestore.Client, model: Any) -> None:
     if not callback.from_user:
         await callback.answer()
         return
 
+    # 1. Перевіряємо/створюємо юзера
     await ensure_user(
         db,
         user_id=callback.from_user.id,
@@ -38,36 +40,55 @@ async def universe_advice(callback: CallbackQuery, db: firestore.Client, advice_
         first_name=callback.from_user.first_name or "",
     )
 
-    balance = await get_balance(db, callback.from_user.id)
-    if balance < ADVICE_PRICE:
-        await callback.answer("Недостатньо ⭐ — відкриваю оплату…")
-        await send_stars_invoice(
-            callback=callback,
-            title="Поповнення балансу Karma",
-            description=f"Поповнення на {ADVICE_PRICE} ⭐ для Universe Advice.",
-            amount_stars=ADVICE_PRICE,
-            payload=f"topup:{ADVICE_PRICE}",
-        )
-        return
+    # 👇 МАГІЧНИЙ ПРОПУСК ДЛЯ АДМІНА 👇
+    is_admin = callback.from_user.id in ADMIN_IDS
 
+    if is_admin:
+        await callback.answer("👑 Режим Адміна: Безкоштовно!")
+        # Пропускаємо блок оплати
+    else:
+        # Звичайна оплата для смертних
+        balance = await get_balance(db, callback.from_user.id)
+        if balance < ADVICE_PRICE:
+            await callback.answer("Недостатньо ⭐ — відкриваю оплату…")
+            await send_stars_invoice(
+                callback=callback,
+                title="Порада Всесвіту",
+                description="Отримати мудру пораду від карт Таро.",
+                amount_stars=ADVICE_PRICE,
+                payload=f"topup:{ADVICE_PRICE}",
+            )
+            return
+
+        try:
+            await increment_balance(db, callback.from_user.id, -ADVICE_PRICE)
+        except InsufficientBalanceError:
+            await callback.answer("Недостатньо ⭐")
+            return
+    # 👆 КІНЕЦЬ БЛОКУ ОПЛАТИ 👆
+
+    # Анімація
+    await callback.answer()
+    msg = await callback.message.answer("🧘 <i>З'єднуюсь з потоком...</i>")
+    await asyncio.sleep(1.5)
+    await msg.edit_text("✨ <i>Слухаю шепіт Всесвіту...</i>")
+    
+    prompt = (
+        "Дай коротку, глибоку і філософську пораду від імені Всесвіту/Таро для цієї людини на сьогодні. "
+        "Порада має бути підтримуючою і мудрою. "
+        "Закінчи повідомлення короткою афірмацією."
+    )
+    
     try:
-        await increment_balance(db, callback.from_user.id, -ADVICE_PRICE)
-    except InsufficientBalanceError:
-        await callback.answer("Недостатньо ⭐ — відкриваю оплату…")
-        await send_stars_invoice(
-            callback=callback,
-            title="Поповнення балансу Karma",
-            description=f"Поповнення на {ADVICE_PRICE} ⭐ для Universe Advice.",
-            amount_stars=ADVICE_PRICE,
-            payload=f"topup:{ADVICE_PRICE}",
-        )
-        return
-
-    await callback.answer("Слухаю Всесвіт…")
-
-    prompt = "Дай мені пораду Всесвіту на сьогодні."
-    text = await _gemini_generate_text(advice_model, prompt)
-
-    if callback.message:
-        await callback.message.answer(text)
-        await callback.message.answer("Обери наступну дію:", reply_markup=back_to_menu_kb())
+        text = await _gemini_generate_text(model, prompt)
+        
+        await msg.delete()
+        
+        if callback.message:
+            await callback.message.answer(text)
+            # Показуємо головне меню, щоб людина могла піти далі
+            await callback.message.answer("Обери наступну дію:", reply_markup=main_menu_kb())
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        await msg.edit_text("Ефір зараз закритий хмарами. Спробуй пізніше.")
