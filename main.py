@@ -11,7 +11,14 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import load_settings
 from firebase_db import init_firestore
-from handlers import advice_router, payment_router, start_router, tarot_router
+
+# 👇 ВИПРАВЛЕНІ ІМПОРТИ (так надійніше)
+from handlers.advice import router as advice_router
+from handlers.payment import router as payment_router
+from handlers.start import router as start_router
+from handlers.tarot import router as tarot_router
+
+# Переконайтеся, що створили файл prompts.py!
 from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 
@@ -47,12 +54,15 @@ async def main() -> None:
 
     genai.configure(api_key=settings.gemini_api_key)
 
+    # Модель для Таро (містична)
     tarot_model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
+        model_name="gemini-2.0-flash", # Або "gemini-1.5-flash", перевірте назву
         system_instruction=KARMA_SYSTEM_PROMPT,
     )
+    
+    # Модель для Порад (філософська)
     advice_model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
+        model_name="gemini-2.0-flash", 
         system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
     )
 
@@ -62,6 +72,8 @@ async def main() -> None:
     )
 
     dp = Dispatcher(storage=MemoryStorage())
+    
+    # 👇 Dependency Injection: передаємо обидві моделі
     dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)
 
     dp.include_router(payment_router)

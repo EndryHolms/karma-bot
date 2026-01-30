@@ -9,14 +9,13 @@ from firebase_admin import firestore
 
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance
 from handlers.payment import send_stars_invoice
-# Імпортуємо кнопки, щоб в кінці показати меню
 from keyboards import CB_ADVICE, main_menu_kb
 
 router = Router()
 
 ADVICE_PRICE = 25
 
-# 👇 ВСТАВТЕ СЮДИ СВІЙ ID
+# ВАШ ID
 ADMIN_IDS = [469764985] 
 
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
@@ -26,13 +25,13 @@ async def _gemini_generate_text(model: Any, prompt: str) -> str:
         return (text or "").strip()
     return await asyncio.to_thread(_call_sync)
 
+# 👇 ТУТ ЗМІНЕНО: тепер ми просимо саме advice_model
 @router.callback_query(F.data == CB_ADVICE)
-async def get_advice(callback: CallbackQuery, db: firestore.Client, model: Any) -> None:
+async def get_advice(callback: CallbackQuery, db: firestore.Client, advice_model: Any) -> None:
     if not callback.from_user:
         await callback.answer()
         return
 
-    # 1. Перевіряємо/створюємо юзера
     await ensure_user(
         db,
         user_id=callback.from_user.id,
@@ -40,14 +39,11 @@ async def get_advice(callback: CallbackQuery, db: firestore.Client, model: Any) 
         first_name=callback.from_user.first_name or "",
     )
 
-    # 👇 МАГІЧНИЙ ПРОПУСК ДЛЯ АДМІНА 👇
     is_admin = callback.from_user.id in ADMIN_IDS
 
     if is_admin:
         await callback.answer("👑 Режим Адміна: Безкоштовно!")
-        # Пропускаємо блок оплати
     else:
-        # Звичайна оплата для смертних
         balance = await get_balance(db, callback.from_user.id)
         if balance < ADVICE_PRICE:
             await callback.answer("Недостатньо ⭐ — відкриваю оплату…")
@@ -65,9 +61,7 @@ async def get_advice(callback: CallbackQuery, db: firestore.Client, model: Any) 
         except InsufficientBalanceError:
             await callback.answer("Недостатньо ⭐")
             return
-    # 👆 КІНЕЦЬ БЛОКУ ОПЛАТИ 👆
 
-    # Анімація
     await callback.answer()
     msg = await callback.message.answer("🧘 <i>З'єднуюсь з потоком...</i>")
     await asyncio.sleep(1.5)
@@ -76,17 +70,17 @@ async def get_advice(callback: CallbackQuery, db: firestore.Client, model: Any) 
     prompt = (
         "Дай коротку, глибоку і філософську пораду від імені Всесвіту/Таро для цієї людини на сьогодні. "
         "Порада має бути підтримуючою і мудрою. "
-        "Закінчи повідомлення короткою афірмацією."
+        "Закінчи повідомлення короткою афірмацією. Виділи афірмацію жирним курсивом."
     )
     
     try:
-        text = await _gemini_generate_text(model, prompt)
+        # 👇 ТУТ ТЕЖ: передаємо advice_model
+        text = await _gemini_generate_text(advice_model, prompt)
         
         await msg.delete()
         
         if callback.message:
             await callback.message.answer(text)
-            # Показуємо головне меню, щоб людина могла піти далі
             await callback.message.answer("Обери наступну дію:", reply_markup=main_menu_kb())
             
     except Exception as e:
