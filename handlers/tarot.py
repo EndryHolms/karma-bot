@@ -15,13 +15,12 @@ from firebase_admin import firestore
 
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance
 from handlers.payment import send_stars_invoice
-# 👇 ДОДАНО main_menu_kb в імпорти
 from keyboards import (
     CB_CAREER,
     CB_DAILY,
     CB_RELATIONSHIP,
     back_to_menu_kb,
-    main_menu_kb, 
+    main_menu_kb,
 )
 
 router = Router()
@@ -29,11 +28,12 @@ router = Router()
 RELATIONSHIP_PRICE = 75
 CAREER_PRICE = 100
 
-# Вставте сюди свій ID, якщо він зник під час копіювання
+# 👇 НЕ ЗАБУДЬТЕ ПЕРЕВІРИТИ, ЧИ ТУТ Є ВАШ ID
 ADMIN_IDS = [469764985] 
 
+# 👇 НОВИЙ КОРОТКИЙ ТЕКСТ ВНИЗУ
 FOOTER_TEXT = (
-    "\n\n✨ <i>Відчуваєш, що це не все? Карти готові відкрити більше. "
+    "\n\n💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. "
     "Обери тему нижче 👇</i>"
 )
 
@@ -130,7 +130,7 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     await asyncio.sleep(1.5)
     await msg.edit_text("🎴 <i>Тасую колоду...</i>")
     
-    prompt = "Витягни для мене карту дня і поясни енергію цього дня."
+    prompt = "Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨."
     
     try:
         text = await _gemini_generate_text(tarot_model, prompt)
@@ -141,7 +141,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
         if callback.message:
             await _send_long(callback.message, text)
-            # 👇 ТУТ ЗМІНЕНО: показуємо повне меню замість "Назад"
             await callback.message.answer("Обери наступну дію:", reply_markup=main_menu_kb())
             
     except Exception as e:
@@ -304,6 +303,5 @@ async def reading_context_message(
     await msg.delete()
 
     await _send_long(message, text)
-    # 👇 ТУТ ТЕЖ ЗМІНЕНО: показуємо повне меню замість "Назад"
     await message.answer("Обери наступну дію:", reply_markup=main_menu_kb())
     await state.clear()

@@ -1,6 +1,6 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-# Константи для Callback Data (щоб не плутатись)
+# Константи
 CB_DAILY = "daily_card"
 CB_RELATIONSHIP = "relationship"
 CB_CAREER = "career"
@@ -10,11 +10,18 @@ CB_BACK_MENU = "back_menu"
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔮 Карта дня (Безкоштовно)", callback_data=CB_DAILY)],
-        [InlineKeyboardButton(text="❤️ ❤️ Любов та Стосунки (75 ⭐)", callback_data=CB_RELATIONSHIP)],
-        [InlineKeyboardButton(text="💼 Гроші та Реалізація (100 ⭐)", callback_data=CB_CAREER)],
+        # Було "Карта дня", стало "Енергія дня"
+        [InlineKeyboardButton(text="✨ Енергія дня (Free)", callback_data=CB_DAILY)],
+        
+        # Було "Розклад на відносини", стало "Любов та Стосунки"
+        [InlineKeyboardButton(text="❤️ Любов та Стосунки (75 ⭐)", callback_data=CB_RELATIONSHIP)],
+        
+        # Було "Кар'єра та Гроші", стало "Гроші та Реалізація"
+        [InlineKeyboardButton(text="💰 Гроші та Реалізація (100 ⭐)", callback_data=CB_CAREER)],
+        
         [InlineKeyboardButton(text="🧘 Порада Всесвіту (25 ⭐)", callback_data=CB_ADVICE)],
-        # 👇 ОСЬ ТУТ ЗМІНЕНО НАЗВУ 👇
+        
+        # Ваша назва
         [InlineKeyboardButton(text="👤 Моя карма (баланс)", callback_data=CB_PROFILE)],
     ])
     return kb
