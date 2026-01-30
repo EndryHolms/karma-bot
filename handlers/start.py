@@ -22,7 +22,7 @@ async def cmd_start(message: Message, db: firestore.Client) -> None:
     )
 
     text = (
-        f"<b>{user.first_name}, вітаю тебе</b>\n\n"
+        f"<b>{user.first_name}, вітаю тебе!</b>\n\n"
         "Я — <b>Karma</b>, твоя містична таро-провідниця.\n"
         "Обери, що хочеш дізнатись сьогодні."
     )
