@@ -8,6 +8,7 @@ from keyboards import CB_BACK_MENU, CB_PROFILE, main_menu_kb
 
 router = Router()
 
+# Ваше зображення
 WELCOME_IMAGE_URL = "https://i.postimg.cc/7hWHVtr6/Gemini-Generated-Image-y1ell9y1ell9y1el-(1).png"
 
 
@@ -21,10 +22,12 @@ async def cmd_start(message: Message, db: firestore.Client) -> None:
         first_name=user.first_name or "",
     )
 
+    # 👇 НОВИЙ ТЕКСТ ВІТАННЯ
     text = (
-        f"<b>{user.first_name}, вітаю тебе!</b>\n\n"
-        "Я — <b>Karma</b>, твоя містична таро-провідниця.\n"
-        "Обери, що хочеш дізнатись сьогодні."
+        f"Вітаю, <b>{user.first_name}</b>. Я — Karma.\n\n"
+        "Я тут, щоб освітити твій шлях, коли стає темно. "
+        "Пам'ятай: карти не вирішують за тебе, вони лише показують вірогідності.\n\n"
+        "<b>Що турбує твою душу сьогодні?</b>"
     )
 
     try:
@@ -40,7 +43,9 @@ async def cmd_start(message: Message, db: firestore.Client) -> None:
 @router.callback_query(F.data == CB_BACK_MENU)
 async def back_to_menu(callback: CallbackQuery) -> None:
     if callback.message:
-        await callback.message.edit_reply_markup(reply_markup=main_menu_kb())
+        # Видаляємо старе повідомлення і надсилаємо нове меню, щоб було чисто
+        await callback.message.delete()
+        await callback.message.answer("Головне меню:", reply_markup=main_menu_kb())
     await callback.answer()
 
 
@@ -59,14 +64,19 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
 
     balance = await get_balance(db, callback.from_user.id)
 
+    # 👇 ОНОВЛЕНИЙ ТЕКСТ ТУТ
     text = (
-        "<b>Твій профіль</b>\n"
-        f"- Баланс: <b>{balance} ⭐</b>\n\n"
-        "Порада: поповнюй баланс через оплату будь-якої платної функції — "
-        "після успішної оплати зможеш повернутись і повторити запит."
+        f"<b>🧘 Твій енергетичний баланс:</b>\n"
+        f"✨ Доступно зірок: <b>{balance} ⭐️</b>\n\n"
+        "<b>Як отримати більше?</b>\n"
+        "Просто обери будь-який платний розклад у меню. "
+        "Якщо зірок не вистачить — я запропоную зручний спосіб поповнення.\n\n"
+        "<i>Пам'ятай: енергія нікуди не зникає, вона лише змінює форму.</i>"
     )
 
     if callback.message:
-        await callback.message.answer(text, reply_markup=main_menu_kb())
+        await callback.message.edit_text(text, reply_markup=main_menu_kb()) 
+        # Використав edit_text замість answer, щоб не плодити повідомлення, 
+        # але якщо хочеш новим - залиш answer
 
     await callback.answer()
