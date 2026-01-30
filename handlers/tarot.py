@@ -15,11 +15,13 @@ from firebase_admin import firestore
 
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance
 from handlers.payment import send_stars_invoice
+# 👇 ДОДАНО main_menu_kb в імпорти
 from keyboards import (
     CB_CAREER,
     CB_DAILY,
     CB_RELATIONSHIP,
     back_to_menu_kb,
+    main_menu_kb, 
 )
 
 router = Router()
@@ -27,8 +29,7 @@ router = Router()
 RELATIONSHIP_PRICE = 75
 CAREER_PRICE = 100
 
-# 👇 ВСТАВТЕ СЮДИ СВІЙ ID (цифри, які дав @userinfobot)
-# Можна додати кілька ID через кому: [12345678, 87654321]
+# Вставте сюди свій ID, якщо він зник під час копіювання
 ADMIN_IDS = [469764985] 
 
 FOOTER_TEXT = (
@@ -98,8 +99,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         first_name=callback.from_user.first_name or "",
     )
 
-    # 👇 ТУТ ТЕЖ МОЖНА ЗРОБИТИ "БЛАТ" ДЛЯ АДМІНА
-    # Якщо це адмін — пропускаємо перевірку дати
     is_admin = callback.from_user.id in ADMIN_IDS
 
     if not is_admin:
@@ -111,15 +110,20 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
         if last_run == today_str:
             await callback.answer("Сьогодні ти вже отримав карту!", show_alert=True)
+            if callback.message:
+                 await callback.message.answer(
+                    "🔮 <b>Сьогодні зірки вже промовили до тебе.</b>\n\n"
+                    "Не спокушай долю частими питаннями. Обдумай отриману відповідь.\n"
+                    "Приходь завтра за новою порадою. ✨"
+                )
             return
     else:
-        # Для адміна просто отримуємо посилання на док, щоб потім оновити дату (хоча це не обов'язково)
-        doc_ref = db.collection("users").document(user_id)
         today_str = datetime.now().strftime("%Y-%m-%d")
+        doc_ref = db.collection("users").document(user_id)
 
 
-    # Анімація
     await callback.answer()
+    
     msg = await callback.message.answer("🔮 <i>Запитую карту дня...</i>")
     await asyncio.sleep(1.5)
     await msg.edit_text("✨ <i>Налаштовуюся на твої вібрації...</i>")
@@ -131,14 +135,14 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     try:
         text = await _gemini_generate_text(tarot_model, prompt)
         
-        # Оновлюємо дату
         doc_ref.update({"last_daily_card_date": today_str})
 
         await msg.delete()
 
         if callback.message:
             await _send_long(callback.message, text)
-            await callback.message.answer("Обери наступну дію:", reply_markup=back_to_menu_kb())
+            # 👇 ТУТ ЗМІНЕНО: показуємо повне меню замість "Назад"
+            await callback.message.answer("Обери наступну дію:", reply_markup=main_menu_kb())
             
     except Exception as e:
         print(f"Error: {e}")
@@ -164,10 +168,8 @@ async def _start_paid_reading(
         first_name=callback.from_user.first_name or "",
     )
 
-    # 👇 МАГІЧНИЙ ПРОПУСК ДЛЯ АДМІНА 👇
     if callback.from_user.id in ADMIN_IDS:
         await callback.answer("👑 Режим Адміна: Доступ відкрито!")
-        # Одразу переходимо до запиту, ігноруючи баланс
         await state.set_state(ReadingStates.waiting_for_context)
         await state.update_data(reading_key=reading_key)
         
@@ -178,7 +180,6 @@ async def _start_paid_reading(
                 reply_markup=back_to_menu_kb(),
             )
         return
-    # 👆 КІНЕЦЬ БЛОКУ АДМІНА 👆
 
     balance = await get_balance(db, callback.from_user.id)
     if balance < price:
@@ -196,6 +197,13 @@ async def _start_paid_reading(
         await increment_balance(db, callback.from_user.id, -price)
     except InsufficientBalanceError:
         await callback.answer("Недостатньо ⭐ — відкриваю оплату…")
+        await send_stars_invoice(
+            callback=callback,
+            title="Поповнення балансу Karma",
+            description=f"Поповнення на {price} ⭐ для доступу до читання.",
+            amount_stars=price,
+            payload=f"topup:{price}",
+        )
         return
 
     await state.set_state(ReadingStates.waiting_for_context)
@@ -296,5 +304,6 @@ async def reading_context_message(
     await msg.delete()
 
     await _send_long(message, text)
-    await message.answer("Обери наступну дію:", reply_markup=back_to_menu_kb())
+    # 👇 ТУТ ТЕЖ ЗМІНЕНО: показуємо повне меню замість "Назад"
+    await message.answer("Обери наступну дію:", reply_markup=main_menu_kb())
     await state.clear()
