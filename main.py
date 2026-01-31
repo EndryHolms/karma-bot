@@ -3,8 +3,8 @@ import logging
 import os
 import sys
 
-# 👇 ВАЖЛИВО: Імпортуємо нову бібліотеку
-from google import genai
+# 👇 Використовуємо перевірену бібліотеку
+import google.generativeai as genai
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -19,6 +19,9 @@ from handlers.advice import router as advice_router
 from handlers.payment import router as payment_router
 from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
+
+# Імпортуємо системні промпти
+from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 
 async def health_check(request: web.Request) -> web.Response:
@@ -49,14 +52,24 @@ async def main() -> None:
 
     settings = load_settings()
 
+    # Ініціалізація бази даних
     db = await init_firestore(settings.firebase_cred_path)
 
-    # 👇 ГОЛОВНА ЗМІНА:
-    # Замість genai.configure() ми створюємо Клієнта.
-    # Цей клієнт вміє працювати з будь-якою моделлю (і Таро, і Поради).
-    # 👇 СТАНЕ (чистий клієнт, за замовчуванням v1):
-    genai_client = genai.Client(api_key=settings.gemini_api_key)
+    # 👇 КОНФІГУРАЦІЯ GEMINI
+    genai.configure(api_key=settings.gemini_api_key)
+
+    # 👇 ВИКОРИСТОВУЄМО МОДЕЛЬ "gemini-1.5-flash-8b"
+    # Вона найновіша, найшвидша і найменш проблемна для Free Tier
+    tarot_model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash-lite",
+        system_instruction=KARMA_SYSTEM_PROMPT,
+    )
     
+    advice_model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash-lite", 
+        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
+    )
+
     bot = Bot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -64,9 +77,10 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     
-    # 👇 ПЕРЕДАЄМО КЛІЄНТА В ХЕНДЛЕРИ
-    # (Ми замінили tarot_model/advice_model на один genai_client)
-    dp.workflow_data.update(db=db, genai_client=genai_client)
+    # 👇 ПЕРЕДАЄМО МОДЕЛІ В ХЕНДЛЕРИ
+    # Важливо: handlers/tarot.py та handlers/advice.py повинні приймати 
+    # tarot_model/advice_model, а не genai_client!
+    dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)
 
     dp.include_router(payment_router)
     dp.include_router(start_router)

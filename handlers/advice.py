@@ -10,39 +10,27 @@ from firebase_admin import firestore
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance
 from handlers.payment import send_stars_invoice
 from keyboards import CB_ADVICE, main_menu_kb
-# 👇 Імпортуємо системний промпт
-from prompts import UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 router = Router()
 
-# 👇 Тестова ціна (1 зірка)
 ADVICE_PRICE = 1
-
 ADMIN_IDS = [469764985] 
 
-# 👇 Нова модель
-MODEL_NAME = "gemini-1.5-flash"
-
-
-# 👇 ОНОВЛЕНА ФУНКЦІЯ (працює з genai_client)
-async def _gemini_generate_text(client: Any, prompt: str) -> str:
+# 👇 СТАРА ФУНКЦІЯ (Приймає model, а не client)
+async def _gemini_generate_text(model: Any, prompt: str) -> str:
     def _call_sync() -> str:
-        # Виклик через новий SDK
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=prompt,
-            config={"system_instruction": UNIVERSE_ADVICE_SYSTEM_PROMPT}
-        )
-        return response.text if response.text else ""
+        # У старій бібліотеці ми просто викликаємо метод у об'єкта моделі
+        resp = model.generate_content(prompt)
+        text = getattr(resp, "text", None)
+        return (text or "").strip()
     return await asyncio.to_thread(_call_sync)
-
 
 @router.callback_query(F.data == CB_ADVICE)
 async def get_advice(
     callback: CallbackQuery, 
     db: firestore.Client, 
-    # 👇 Тут тепер genai_client замість advice_model
-    genai_client: Any 
+    # 👇 Тут має бути advice_model (як в main.py)
+    advice_model: Any 
 ) -> None:
     if not callback.from_user:
         await callback.answer()
@@ -83,7 +71,6 @@ async def get_advice(
     await asyncio.sleep(1.5)
     await msg.edit_text("✨ <i>Слухаю шепіт Всесвіту...</i>")
     
-    # Текст запиту (системна інструкція додається автоматично в _gemini_generate_text)
     prompt = (
         "Дай коротку, глибоку і філософську пораду від імені Всесвіту/Таро для цієї людини на сьогодні. "
         "Порада має бути підтримуючою і мудрою. "
@@ -91,8 +78,8 @@ async def get_advice(
     )
     
     try:
-        # Передаємо genai_client
-        text = await _gemini_generate_text(genai_client, prompt)
+        # Передаємо advice_model
+        text = await _gemini_generate_text(advice_model, prompt)
         
         await msg.delete()
         
