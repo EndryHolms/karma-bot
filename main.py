@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import os
+import sys
 
-import google.generativeai as genai
+# 👇 ВАЖЛИВО: Імпортуємо нову бібліотеку
+from google import genai
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -12,14 +14,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import load_settings
 from firebase_db import init_firestore
 
-# 👇 ВИПРАВЛЕНІ ІМПОРТИ (так надійніше)
+# Імпорти роутерів
 from handlers.advice import router as advice_router
 from handlers.payment import router as payment_router
 from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
-
-# Переконайтеся, що створили файл prompts.py!
-from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 
 async def health_check(request: web.Request) -> web.Response:
@@ -52,19 +51,10 @@ async def main() -> None:
 
     db = await init_firestore(settings.firebase_cred_path)
 
-    genai.configure(api_key=settings.gemini_api_key)
-
-    # Модель для Таро (містична)
-    tarot_model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-001", # Або "gemini-3-flash-preview", перевірте назву
-        system_instruction=KARMA_SYSTEM_PROMPT,
-    )
-    
-    # Модель для Порад (філософська)
-    advice_model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-001", 
-        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
-    )
+    # 👇 ГОЛОВНА ЗМІНА:
+    # Замість genai.configure() ми створюємо Клієнта.
+    # Цей клієнт вміє працювати з будь-якою моделлю (і Таро, і Поради).
+    genai_client = genai.Client(api_key=settings.gemini_api_key)
 
     bot = Bot(
         token=settings.bot_token,
@@ -73,8 +63,9 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     
-    # 👇 Dependency Injection: передаємо обидві моделі
-    dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)
+    # 👇 ПЕРЕДАЄМО КЛІЄНТА В ХЕНДЛЕРИ
+    # (Ми замінили tarot_model/advice_model на один genai_client)
+    dp.workflow_data.update(db=db, genai_client=genai_client)
 
     dp.include_router(payment_router)
     dp.include_router(start_router)
@@ -92,4 +83,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 from datetime import datetime
 from typing import Any
 
-import google.generativeai as genai
-from aiogram import Bot, F, Router
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -22,14 +19,15 @@ from keyboards import (
     back_to_menu_kb,
     main_menu_kb,
 )
+# 👇 ОБОВ'ЯЗКОВО ІМПОРТУЄМО ПРОМПТ
+from prompts import KARMA_SYSTEM_PROMPT
 
 router = Router()
 
-# 👇 ТУТ ЗМІНЕНО ЦІНИ НА 1 (ДЛЯ ТЕСТУ)
+# 👇 Тестові ціни (1 зірка)
 RELATIONSHIP_PRICE = 1
 CAREER_PRICE = 1
 
-# ВАШ ID
 ADMIN_IDS = [469764985] 
 
 FOOTER_TEXT = (
@@ -37,37 +35,42 @@ FOOTER_TEXT = (
     "Обери тему нижче 👇</i>"
 )
 
+# 👇 ВКАЗУЄМО НОВУ МОДЕЛЬ
+MODEL_NAME = "gemini-2.0-flash"
+
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
 
 
-async def _gemini_generate_text(model: Any, prompt: str) -> str:
+# 👇 ОНОВЛЕНА ФУНКЦІЯ (працює з genai_client)
+async def _gemini_generate_text(client: Any, prompt: str) -> str:
     def _call_sync() -> str:
-        resp = model.generate_content(prompt)
-        text = getattr(resp, "text", None)
-        return (text or "").strip()
+        # Виклик через новий SDK
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config={"system_instruction": KARMA_SYSTEM_PROMPT}
+        )
+        return response.text if response.text else ""
 
     return await asyncio.to_thread(_call_sync)
 
 
-async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: bytes, mime_type: str) -> str:
+# 👇 ОНОВЛЕНА ФУНКЦІЯ ДЛЯ АУДІО (без tempfile, напряму байтами)
+async def _gemini_generate_with_audio(client: Any, prompt: str, audio_bytes: bytes) -> str:
     def _call_sync() -> str:
-        fd, path = tempfile.mkstemp(suffix=".ogg")
-        os.close(fd)
-        try:
-            with open(path, "wb") as f:
-                f.write(audio_bytes)
-
-            uploaded = genai.upload_file(path)
-            resp = model.generate_content([prompt, uploaded])
-            text = getattr(resp, "text", None)
-            return (text or "").strip()
-        finally:
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        from google.genai import types
+        
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[
+                types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg"),
+                prompt
+            ],
+            config={"system_instruction": KARMA_SYSTEM_PROMPT}
+        )
+        return response.text if response.text else ""
 
     return await asyncio.to_thread(_call_sync)
 
@@ -85,7 +88,7 @@ async def _send_long(message: Message, text: str) -> None:
 
 
 @router.callback_query(F.data == CB_DAILY)
-async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model: Any) -> None:
+async def daily_card(callback: CallbackQuery, db: firestore.Client, genai_client: Any) -> None:
     if not callback.from_user:
         await callback.answer()
         return
@@ -109,7 +112,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         last_run = user_data.get("last_daily_card_date")
 
         if last_run == today_str:
-            # Текст вже виправлений на нейтральний
             await callback.answer("Твоя карта на сьогодні вже відкрита!", show_alert=True)
             if callback.message:
                  await callback.message.answer(
@@ -134,7 +136,8 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     prompt = "Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨."
     
     try:
-        text = await _gemini_generate_text(tarot_model, prompt)
+        # Передаємо genai_client
+        text = await _gemini_generate_text(genai_client, prompt)
         
         doc_ref.update({"last_daily_card_date": today_str})
 
@@ -254,7 +257,8 @@ async def reading_context_message(
     state: FSMContext,
     db: firestore.Client,
     bot: Bot,
-    tarot_model: Any,
+    # 👇 Тут тепер genai_client замість tarot_model
+    genai_client: Any, 
 ) -> None:
     if not message.from_user:
         return
@@ -287,7 +291,8 @@ async def reading_context_message(
             f"Користувач надіслав голосове повідомлення з контекстом про {topic}. "
             f"Спочатку зрозумій/транскрибуй зміст українською, потім зроби розклад. {extra}"
         )
-        text = await _gemini_generate_with_audio(tarot_model, prompt, audio_bytes, "audio/ogg")
+        # Передаємо genai_client
+        text = await _gemini_generate_with_audio(genai_client, prompt, audio_bytes)
     else:
         user_text = (message.text or "").strip()
         if not user_text:
@@ -299,7 +304,8 @@ async def reading_context_message(
             f"Контекст користувача про {topic}:\n{user_text}\n\n"
             f"Зроби глибоке таро-читання. {extra}"
         )
-        text = await _gemini_generate_text(tarot_model, prompt)
+        # Передаємо genai_client
+        text = await _gemini_generate_text(genai_client, prompt)
 
     await msg.delete()
 

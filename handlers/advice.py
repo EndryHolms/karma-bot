@@ -10,24 +10,40 @@ from firebase_admin import firestore
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance
 from handlers.payment import send_stars_invoice
 from keyboards import CB_ADVICE, main_menu_kb
+# 👇 Імпортуємо системний промпт
+from prompts import UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 router = Router()
 
-# 👇 ТУТ ЗМІНЕНО ЦІНУ НА 1
+# 👇 Тестова ціна (1 зірка)
 ADVICE_PRICE = 1
 
-# ВАШ ID
 ADMIN_IDS = [469764985] 
 
-async def _gemini_generate_text(model: Any, prompt: str) -> str:
+# 👇 Нова модель
+MODEL_NAME = "gemini-2.0-flash"
+
+
+# 👇 ОНОВЛЕНА ФУНКЦІЯ (працює з genai_client)
+async def _gemini_generate_text(client: Any, prompt: str) -> str:
     def _call_sync() -> str:
-        resp = model.generate_content(prompt)
-        text = getattr(resp, "text", None)
-        return (text or "").strip()
+        # Виклик через новий SDK
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config={"system_instruction": UNIVERSE_ADVICE_SYSTEM_PROMPT}
+        )
+        return response.text if response.text else ""
     return await asyncio.to_thread(_call_sync)
 
+
 @router.callback_query(F.data == CB_ADVICE)
-async def get_advice(callback: CallbackQuery, db: firestore.Client, advice_model: Any) -> None:
+async def get_advice(
+    callback: CallbackQuery, 
+    db: firestore.Client, 
+    # 👇 Тут тепер genai_client замість advice_model
+    genai_client: Any 
+) -> None:
     if not callback.from_user:
         await callback.answer()
         return
@@ -67,6 +83,7 @@ async def get_advice(callback: CallbackQuery, db: firestore.Client, advice_model
     await asyncio.sleep(1.5)
     await msg.edit_text("✨ <i>Слухаю шепіт Всесвіту...</i>")
     
+    # Текст запиту (системна інструкція додається автоматично в _gemini_generate_text)
     prompt = (
         "Дай коротку, глибоку і філософську пораду від імені Всесвіту/Таро для цієї людини на сьогодні. "
         "Порада має бути підтримуючою і мудрою. "
@@ -74,7 +91,8 @@ async def get_advice(callback: CallbackQuery, db: firestore.Client, advice_model
     )
     
     try:
-        text = await _gemini_generate_text(advice_model, prompt)
+        # Передаємо genai_client
+        text = await _gemini_generate_text(genai_client, prompt)
         
         await msg.delete()
         
