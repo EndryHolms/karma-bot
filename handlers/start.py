@@ -1,8 +1,6 @@
 from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
-# 👇 ДОДАНО ІМПОРТ ПОМИЛКИ
-from aiogram.exceptions import TelegramBadRequest 
 from firebase_admin import firestore
 
 from firebase_db import ensure_user, get_balance
@@ -42,6 +40,7 @@ async def cmd_start(message: Message, db: firestore.Client) -> None:
 
 @router.callback_query(F.data == CB_BACK_MENU)
 async def back_to_menu(callback: CallbackQuery) -> None:
+    # Кнопка "Назад" може видаляти старе повідомлення, щоб не засмічувати чат
     if callback.message:
         await callback.message.delete()
         await callback.message.answer("Головне меню:", reply_markup=main_menu_kb())
@@ -73,12 +72,8 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
     )
 
     if callback.message:
-        # 👇 БЛОК ЗАХИСТУ ВІД ПОМИЛКИ 👇
-        try:
-            await callback.message.edit_text(text, reply_markup=main_menu_kb())
-        except TelegramBadRequest:
-            # Якщо текст не змінився, Telegram свариться. 
-            # Ми просто ігноруємо це (pass), бо для користувача нічого не змінюється.
-            pass
+        # 👇 ТУТ ЗМІНА: answer замість edit_text
+        # Це створить НОВЕ повідомлення, а старе (розклад) залишиться висіти
+        await callback.message.answer(text, reply_markup=main_menu_kb())
 
     await callback.answer()
