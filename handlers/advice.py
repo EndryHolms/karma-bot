@@ -16,20 +16,21 @@ router = Router()
 ADVICE_PRICE = 1
 ADMIN_IDS = [469764985] 
 
-# 👇 СТАРА ФУНКЦІЯ (Приймає model, а не client)
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
     def _call_sync() -> str:
-        # У старій бібліотеці ми просто викликаємо метод у об'єкта моделі
-        resp = model.generate_content(prompt)
-        text = getattr(resp, "text", None)
-        return (text or "").strip()
+        try:
+            resp = model.generate_content(prompt)
+            text = getattr(resp, "text", None)
+            return (text or "").strip()
+        except Exception as e:
+            print(f"Advice GenAI Error: {e}")
+            return ""
     return await asyncio.to_thread(_call_sync)
 
 @router.callback_query(F.data == CB_ADVICE)
 async def get_advice(
     callback: CallbackQuery, 
     db: firestore.Client, 
-    # 👇 Тут має бути advice_model (як в main.py)
     advice_model: Any 
 ) -> None:
     if not callback.from_user:
@@ -50,11 +51,11 @@ async def get_advice(
     else:
         balance = await get_balance(db, callback.from_user.id)
         if balance < ADVICE_PRICE:
-            await callback.answer("Недостатньо ⭐ — відкриваю оплату…")
+            await callback.answer("Недостатньо ⭐")
             await send_stars_invoice(
                 callback=callback,
                 title="Порада Всесвіту",
-                description="Отримати мудру пораду від карт Таро.",
+                description="Отримати мудру пораду.",
                 amount_stars=ADVICE_PRICE,
                 payload=f"topup:{ADVICE_PRICE}",
             )
@@ -78,15 +79,13 @@ async def get_advice(
     )
     
     try:
-        # Передаємо advice_model
         text = await _gemini_generate_text(advice_model, prompt)
-        
         await msg.delete()
         
         if callback.message:
-            await callback.message.answer(text)
-            await callback.message.answer("Обери наступну дію:", reply_markup=main_menu_kb())
+            # Відправляємо текст разом з кнопками
+            await callback.message.answer(text, reply_markup=main_menu_kb())
             
     except Exception as e:
         print(f"Error: {e}")
-        await msg.edit_text("Ефір зараз закритий хмарами. Спробуй пізніше.")
+        await msg.edit_text("Ефір зараз закритий хмарами. Спробуй пізніше.", reply_markup=main_menu_kb())
