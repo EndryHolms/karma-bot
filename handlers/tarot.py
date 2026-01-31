@@ -109,7 +109,7 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         last_run = user_data.get("last_daily_card_date")
 
         if last_run == today_str:
-            await callback.answer("Сьогодні ти вже отримав карту!", show_alert=True)
+            await callback.answer("Твоя карта на сьогодні вже відкрита!", show_alert=True)
             if callback.message:
                  await callback.message.answer(
                     "🔮 <b>Сьогодні зірки вже промовили до тебе.</b>\n\n"
