@@ -36,7 +36,7 @@ FOOTER_TEXT = (
 )
 
 # 👇 ВКАЗУЄМО НОВУ МОДЕЛЬ
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-1.5-flash"
 
 
 class ReadingStates(StatesGroup):
