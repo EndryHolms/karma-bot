@@ -25,10 +25,12 @@ from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 
 async def health_check(request: web.Request) -> web.Response:
+    """Відповідає 'Bot is alive' для UptimeRobot"""
     return web.Response(text="Bot is alive")
 
 
 async def _run_web_server(port: int) -> None:
+    """Запускає веб-сервер на потрібному порті"""
     app = web.Application()
     app.router.add_get("/", health_check)
 
@@ -38,6 +40,7 @@ async def _run_web_server(port: int) -> None:
     site = web.TCPSite(runner, host="0.0.0.0", port=port)
     await site.start()
 
+    # Тримаємо сервер запущеним
     try:
         await asyncio.Event().wait()
     finally:
@@ -58,8 +61,9 @@ async def main() -> None:
     # 👇 КОНФІГУРАЦІЯ GEMINI
     genai.configure(api_key=settings.gemini_api_key)
 
-    # 👇 ВИКОРИСТОВУЄМО МОДЕЛЬ "gemini-1.5-flash-8b"
-    # Вона найновіша, найшвидша і найменш проблемна для Free Tier
+    # 👇 ВАЖЛИВА ЗМІНА:
+    # Використовуємо "gemini-1.5-flash" замість "2.5-lite".
+    # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.
     tarot_model = genai.GenerativeModel(
         model_name="gemini-2.5-flash-lite",
         system_instruction=KARMA_SYSTEM_PROMPT,
@@ -77,9 +81,7 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     
-    # 👇 ПЕРЕДАЄМО МОДЕЛІ В ХЕНДЛЕРИ
-    # Важливо: handlers/tarot.py та handlers/advice.py повинні приймати 
-    # tarot_model/advice_model, а не genai_client!
+    # Передаємо моделі в хендлери
     dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)
 
     dp.include_router(payment_router)
@@ -87,8 +89,11 @@ async def main() -> None:
     dp.include_router(tarot_router)
     dp.include_router(advice_router)
 
+    # Запуск веб-сервера для UptimeRobot
     port = int(os.environ.get("PORT", 8080))
+    # Запускаємо сервер в фоні (task), щоб не блокувати бота
     web_task = asyncio.create_task(_run_web_server(port))
+    logging.info(f"🌍 Web server started on port {port}")
 
     try:
         await dp.start_polling(bot)
