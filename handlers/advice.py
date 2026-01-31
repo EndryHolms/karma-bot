@@ -13,7 +13,8 @@ from keyboards import CB_ADVICE, main_menu_kb
 
 router = Router()
 
-ADVICE_PRICE = 25
+# 👇 ТУТ ЗМІНЕНО ЦІНУ НА 1
+ADVICE_PRICE = 1
 
 # ВАШ ID
 ADMIN_IDS = [469764985] 
@@ -25,7 +26,6 @@ async def _gemini_generate_text(model: Any, prompt: str) -> str:
         return (text or "").strip()
     return await asyncio.to_thread(_call_sync)
 
-# 👇 ТУТ ЗМІНЕНО: тепер ми просимо саме advice_model
 @router.callback_query(F.data == CB_ADVICE)
 async def get_advice(callback: CallbackQuery, db: firestore.Client, advice_model: Any) -> None:
     if not callback.from_user:
@@ -74,7 +74,6 @@ async def get_advice(callback: CallbackQuery, db: firestore.Client, advice_model
     )
     
     try:
-        # 👇 ТУТ ТЕЖ: передаємо advice_model
         text = await _gemini_generate_text(advice_model, prompt)
         
         await msg.delete()

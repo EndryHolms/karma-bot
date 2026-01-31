@@ -25,13 +25,13 @@ from keyboards import (
 
 router = Router()
 
-RELATIONSHIP_PRICE = 75
-CAREER_PRICE = 100
+# 👇 ТУТ ЗМІНЕНО ЦІНИ НА 1 (ДЛЯ ТЕСТУ)
+RELATIONSHIP_PRICE = 1
+CAREER_PRICE = 1
 
-# 👇 НЕ ЗАБУДЬТЕ ПЕРЕВІРИТИ, ЧИ ТУТ Є ВАШ ID
+# ВАШ ID
 ADMIN_IDS = [469764985] 
 
-# 👇 НОВИЙ КОРОТКИЙ ТЕКСТ ВНИЗУ
 FOOTER_TEXT = (
     "\n\n💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. "
     "Обери тему нижче 👇</i>"
@@ -109,6 +109,7 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         last_run = user_data.get("last_daily_card_date")
 
         if last_run == today_str:
+            # Текст вже виправлений на нейтральний
             await callback.answer("Твоя карта на сьогодні вже відкрита!", show_alert=True)
             if callback.message:
                  await callback.message.answer(
