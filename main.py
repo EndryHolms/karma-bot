@@ -54,7 +54,10 @@ async def main() -> None:
     # 👇 ГОЛОВНА ЗМІНА:
     # Замість genai.configure() ми створюємо Клієнта.
     # Цей клієнт вміє працювати з будь-якою моделлю (і Таро, і Поради).
-    genai_client = genai.Client(api_key=settings.gemini_api_key)
+    genai_client = genai.Client(
+    api_key=settings.gemini_api_key,
+    http_options={'api_version': 'v1beta'} 
+)
 
     bot = Bot(
         token=settings.bot_token,

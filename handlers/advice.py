@@ -21,7 +21,7 @@ ADVICE_PRICE = 1
 ADMIN_IDS = [469764985] 
 
 # 👇 Нова модель
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "models/gemini-1.5-flash"
 
 
 # 👇 ОНОВЛЕНА ФУНКЦІЯ (працює з genai_client)
