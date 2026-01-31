@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 from typing import Any
 
-# 👇 Використовуємо стару бібліотеку
+# 👇 Використовуємо стару стабільну бібліотеку
 import google.generativeai as genai
 
 from aiogram import F, Router
@@ -21,7 +21,7 @@ from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, mai
 
 router = Router()
 
-# 👇 Налаштування
+# 👇 Налаштування цін та адмінів
 RELATIONSHIP_PRICE = 1
 CAREER_PRICE = 1
 ADMIN_IDS = [469764985]  # Ваш ID
@@ -31,7 +31,7 @@ FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
 
-# --- ФУНКЦІЇ ГЕНЕРАЦІЇ (WRAPPER) ---
+# --- ФУНКЦІЇ ГЕНЕРАЦІЇ ---
 
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
     """Генерує текст (синхронний виклик в окремому потоці)."""
@@ -48,7 +48,7 @@ async def _gemini_generate_text(model: Any, prompt: str) -> str:
 async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: bytes) -> str:
     """Генерує текст на основі аудіо (через тимчасовий файл)."""
     def _call_sync() -> str:
-        # Створюємо тимчасовий файл, бо стара бібліотека хоче шлях до файлу
+        # Створюємо тимчасовий файл для аудіо
         fd, path = tempfile.mkstemp(suffix=".ogg")
         os.close(fd)
         try:
@@ -74,7 +74,7 @@ async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: byte
     return await asyncio.to_thread(_call_sync)
 
 async def _send_long(message: Message, text: str, reply_markup: Any = None) -> None:
-    """Розбиває довгий текст на частини і додає кнопки до останньої."""
+    """Розбиває довгий текст на частини і додає кнопки ТІЛЬКИ до останньої."""
     if not text:
         await message.answer("Сталося щось дивне — я не отримала відповідь. Спробуй ще раз.", reply_markup=reply_markup)
         return
@@ -82,6 +82,7 @@ async def _send_long(message: Message, text: str, reply_markup: Any = None) -> N
     final_text = text + FOOTER_TEXT
     limit = 4000 # Ліміт Telegram
     
+    # Розбиваємо текст на шматки
     chunks = [final_text[i : i + limit] for i in range(0, len(final_text), limit)]
     
     for i, chunk in enumerate(chunks):
@@ -91,6 +92,7 @@ async def _send_long(message: Message, text: str, reply_markup: Any = None) -> N
             # До останнього шматка чіпляємо кнопки
             await message.answer(chunk, reply_markup=reply_markup)
         else:
+            # Інші шматки шлемо просто текстом
             await message.answer(chunk)
 
 # --- HANDLERS ---
@@ -110,8 +112,21 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
             await callback.answer("Твоя карта на сьогодні вже відкрита!", show_alert=True)
             return
 
-    await callback.answer()
+    await callback.answer() # Прибираємо спінер
+    
+    # 👇 АНІМАЦІЯ (3 кроки) 👇
+    
+    # 1. Запитую
     msg = await callback.message.answer("🔮 <i>Запитую карту дня...</i>")
+    await asyncio.sleep(2.0)
+    
+    # 2. Налаштовуюсь
+    await msg.edit_text("🧘 <i>Налаштовуюся на твої вібрації...</i>")
+    await asyncio.sleep(2.0)
+    
+    # 3. Тасую
+    await msg.edit_text("🎴 <i>Тасую колоду...</i>")
+    # Тут коротка пауза, поки генерується текст
     
     prompt = "Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨."
     
@@ -119,11 +134,13 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         text = await _gemini_generate_text(tarot_model, prompt)
         
         if text:
-            # Оновлюємо дату, тільки якщо отримали відповідь
+            # Оновлюємо дату
             db.collection("users").document(user_id).update({"last_daily_card_date": datetime.now().strftime("%Y-%m-%d")})
         
-        await msg.delete()
+        await msg.delete() # Видаляємо повідомлення "Тасую..."
+        
         if callback.message:
+            # Відправляємо результат з кнопками
             await _send_long(callback.message, text, reply_markup=main_menu_kb())
             
     except Exception as e:
@@ -142,18 +159,17 @@ async def career_reading(callback: CallbackQuery, state: FSMContext, db: firesto
 
 
 async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db: firestore.Client, price: int, reading_key: str) -> None:
-    """Універсальна функція для платних розкладів."""
+    """Перевірка оплати і початок діалогу."""
     if not callback.from_user: return
     await ensure_user(db, user_id=callback.from_user.id, username=callback.from_user.username or "", first_name=callback.from_user.first_name or "")
 
-    # Спочатку відповідаємо на колбек, щоб прибрати "годинничок"
     await callback.answer()
 
     is_admin = callback.from_user.id in ADMIN_IDS
     if is_admin:
-        # 👇 Видиме повідомлення для адміна
+        # Видиме повідомлення для адміна
         if callback.message:
-            await callback.message.answer("👑 Admin Mode: Оплата пропущена (безкоштовно).")
+            await callback.message.answer("👑 Admin Mode: Оплата пропущена.")
     else:
         balance = await get_balance(db, callback.from_user.id)
         if balance < price:
@@ -173,7 +189,7 @@ async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db:
                 await callback.message.answer("Недостатньо ⭐ для оплати.")
             return
 
-    # Якщо все ок (адмін або оплатив), переходимо до стану
+    # Переходимо до стану
     await state.set_state(ReadingStates.waiting_for_context)
     await state.update_data(reading_key=reading_key)
     
@@ -185,7 +201,7 @@ async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db:
 async def reading_context_message(message: Message, state: FSMContext, db: firestore.Client, bot: Any, tarot_model: Any) -> None:
     if not message.from_user: return
     
-    # Прибираємо кнопку "Назад"
+    # Прибираємо кнопку "Назад" і показуємо статус
     msg = await message.answer("🔮 <i>Розкладаю карти...</i>", reply_markup=ReplyKeyboardRemove())
     
     data = await state.get_data()
@@ -195,18 +211,17 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
     text = ""
     try:
         if message.voice:
-            # Завантаження голосу
+            # Обробка голосу
             file_info = await bot.get_file(message.voice.file_id)
             file_path = file_info.file_path
             
-            # Скачуємо файл у пам'ять
             downloaded_file = await bot.download_file(file_path)
             audio_bytes = downloaded_file.read()
 
             prompt = f"Контекст про {topic} (голос). Зроби розклад."
             text = await _gemini_generate_with_audio(tarot_model, prompt, audio_bytes)
         else:
-            # Текстовий запит
+            # Обробка тексту
             user_text = message.text or ""
             prompt = f"Контекст про {topic}: {user_text}. Зроби розклад."
             text = await _gemini_generate_text(tarot_model, prompt)
@@ -217,8 +232,7 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
 
     await msg.delete()
     
-    # Відправляємо результат з кнопками в кінці
+    # Відправляємо довгий текст і кнопки в кінці
     await _send_long(message, text, reply_markup=main_menu_kb())
     
-    # Очищаємо стан
     await state.clear()
