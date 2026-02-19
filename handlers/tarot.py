@@ -6,7 +6,6 @@ import tempfile
 from datetime import datetime
 from typing import Any
 
-# Використовуємо аліас
 import google.generativeai as genai
 
 from aiogram import F, Router
@@ -25,13 +24,15 @@ router = Router()
 RELATIONSHIP_PRICE = 1
 CAREER_PRICE = 1
 
-# Читаємо ADMIN_IDS зі змінних оточення (.env або Render)
-# Якщо змінної немає, беремо твій ID як підстраховку
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
-# Розбиваємо рядок по комам і перетворюємо в числа
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
 FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. Обери тему нижче 👇</i>"
+
+# 👇 ДОДАНО ВІЗУАЛІЗАЦІЮ (Посилання на картинки) 👇
+IMG_DAILY = "https://images.unsplash.com/photo-1633422650059-715ee2755a95?auto=format&fit=crop&w=800&q=80" # Карти таро
+IMG_LOVE = "https://images.unsplash.com/photo-1618331835717-801e976710b2?auto=format&fit=crop&w=800&q=80" # Містична любовна атмосфера
+IMG_CAREER = "https://images.unsplash.com/photo-1606189207264-585b46b28038?auto=format&fit=crop&w=800&q=80" # Успіх, монети, карти
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
@@ -109,9 +110,13 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         text = await _gemini_generate_text(tarot_model, prompt)
         if text:
             db.collection("users").document(user_id).update({"last_daily_card_date": datetime.now().strftime("%Y-%m-%d")})
+        
         await msg.delete()
+        
         if callback.message:
             if text:
+                # 👇 ДОДАНО: Відправка картинки перед текстом
+                await callback.message.answer_photo(photo=IMG_DAILY, caption="✨ <i>Енергія дня вже тут...</i>")
                 await _send_long(callback.message, text, reply_markup=main_menu_kb())
             else:
                 await callback.message.answer("Вибач, магічний ефір зараз перевантажений.", reply_markup=main_menu_kb())
@@ -143,7 +148,6 @@ async def career_reading(callback: CallbackQuery, state: FSMContext, db: firesto
 
 
 async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db: firestore.Client, price: int, reading_key: str, title: str, description: str) -> None:
-    """Перевірка оплати і початок діалогу з динамічним чеком."""
     if not callback.from_user: return
     await ensure_user(db, user_id=callback.from_user.id, username=callback.from_user.username or "", first_name=callback.from_user.first_name or "")
 
@@ -173,8 +177,6 @@ async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db:
             return
 
     await state.set_state(ReadingStates.waiting_for_context)
-    
-    # 👇 ЗБЕРІГАЄМО ЦІНУ У СТАН: щоб знати, скільки повертати при помилці
     await state.update_data(reading_key=reading_key, price=price)
     
     if callback.message:
@@ -201,7 +203,7 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
     
     data = await state.get_data()
     reading_key = data.get("reading_key")
-    price = data.get("price", 1) # 👇 ДІСТАЄМО ЦІНУ (якщо її немає, ставимо 1 за замовчуванням)
+    price = data.get("price", 1)
     
     topic = "стосунки" if reading_key == "relationship" else "кар'єра"
 
@@ -232,22 +234,17 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
 
     await msg.delete()
     
-    # 👇 ЛОГІКА ПОВЕРНЕННЯ КОШТІВ (REFUND)
     if not text:
         is_admin = message.from_user.id in ADMIN_IDS
-        
-        # Якщо це не адмін, повертаємо зірки в базу
         if not is_admin:
             try:
                 await increment_balance(db, message.from_user.id, price)
                 refund_note = f"Твої <b>{price} ⭐️ автоматично повернуто</b> на баланс."
-            except Exception as e:
-                print(f"Refund Error: {e}")
+            except Exception:
                 refund_note = "Звернись до підтримки щодо балансу."
         else:
             refund_note = "(Admin Mode: баланс не змінювався)"
 
-        # Відправляємо заспокійливе повідомлення
         error_msg = (
             "🌪 <i>Магічний ефір раптово перервався... Карти не захотіли говорити.</i>\n\n"
             f"Не хвилюйся. {refund_note} Спробуй запитати ще раз за кілька хвилин."
@@ -256,6 +253,10 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         await state.clear()
         return
 
-    # Якщо текст згенерувався успішно:
+    # 👇 ДОДАНО: Відправка картинки залежно від обраної теми
+    img_to_send = IMG_LOVE if reading_key == "relationship" else IMG_CAREER
+    await message.answer_photo(photo=img_to_send, caption="✨ <i>Карти лягли на стіл...</i>")
+    
+    # Відправляємо сам текст розкладу
     await _send_long(message, text, reply_markup=main_menu_kb())
     await state.clear()
