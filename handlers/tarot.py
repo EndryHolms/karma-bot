@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 from typing import Any
 
-# 👇 Використовуємо аліас
+# Використовуємо аліас
 import google.generativeai as genai
 
 from aiogram import F, Router
@@ -21,10 +21,9 @@ from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, mai
 
 router = Router()
 
-# 👇 Налаштування цін
+# Налаштування цін
 RELATIONSHIP_PRICE = 1
 CAREER_PRICE = 1
-# Краще винести це в .env, але поки нехай буде тут
 ADMIN_IDS = [469764985]
 
 FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. Обери тему нижче 👇</i>"
@@ -32,7 +31,7 @@ FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
 
-# --- ФУНКЦІЇ ГЕНЕРАЦІЇ (без змін) ---
+# --- ФУНКЦІЇ ГЕНЕРАЦІЇ ---
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
     def _call_sync() -> str:
         try:
@@ -64,9 +63,6 @@ async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: byte
     return await asyncio.to_thread(_call_sync)
 
 async def _send_long(message: Message, text: str, reply_markup: Any = None) -> None:
-    if not text:
-        await message.answer("Сталося щось дивне — я не отримала відповідь. Спробуй ще раз.", reply_markup=reply_markup)
-        return
     final_text = text + FOOTER_TEXT
     limit = 4000
     chunks = [final_text[i : i + limit] for i in range(0, len(final_text), limit)]
@@ -110,7 +106,10 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
             db.collection("users").document(user_id).update({"last_daily_card_date": datetime.now().strftime("%Y-%m-%d")})
         await msg.delete()
         if callback.message:
-            await _send_long(callback.message, text, reply_markup=main_menu_kb())
+            if text:
+                await _send_long(callback.message, text, reply_markup=main_menu_kb())
+            else:
+                await callback.message.answer("Вибач, магічний ефір зараз перевантажений.", reply_markup=main_menu_kb())
     except Exception as e:
         print(f"Daily Handler Error: {e}")
         await msg.edit_text("Вибач, магічний ефір зараз перевантажений.", reply_markup=main_menu_kb())
@@ -118,7 +117,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
 @router.callback_query(F.data == CB_RELATIONSHIP)
 async def relationship_reading(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
-    # 👇 Передаємо конкретну назву і опис
     await _start_paid_reading(
         callback=callback, state=state, db=db, 
         price=RELATIONSHIP_PRICE, 
@@ -130,7 +128,6 @@ async def relationship_reading(callback: CallbackQuery, state: FSMContext, db: f
 
 @router.callback_query(F.data == CB_CAREER)
 async def career_reading(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
-    # 👇 Передаємо конкретну назву і опис
     await _start_paid_reading(
         callback=callback, state=state, db=db, 
         price=CAREER_PRICE, 
@@ -154,13 +151,12 @@ async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db:
     else:
         balance = await get_balance(db, callback.from_user.id)
         if balance < price:
-            # 👇 Використовуємо передані title та description
             await send_stars_invoice(
                 callback=callback,
                 title=title,
                 description=description,
                 amount_stars=price,
-                payload=f"topup:{price}", # Це поповнення балансу під конкретну послугу
+                payload=f"topup:{price}",
             )
             return
         
@@ -172,7 +168,9 @@ async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db:
             return
 
     await state.set_state(ReadingStates.waiting_for_context)
-    await state.update_data(reading_key=reading_key)
+    
+    # 👇 ЗБЕРІГАЄМО ЦІНУ У СТАН: щоб знати, скільки повертати при помилці
+    await state.update_data(reading_key=reading_key, price=price)
     
     if callback.message:
         if reading_key == "relationship":
@@ -191,14 +189,15 @@ async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db:
                 reply_markup=back_to_menu_kb()
             )
 
-# --- БЛОК reading_context_message залишається без змін ---
+
 @router.message(ReadingStates.waiting_for_context)
 async def reading_context_message(message: Message, state: FSMContext, db: firestore.Client, bot: Any, tarot_model: Any) -> None:
-    # ... (код той самий, що і був) ...
     if not message.from_user: return
     
     data = await state.get_data()
     reading_key = data.get("reading_key")
+    price = data.get("price", 1) # 👇 ДІСТАЄМО ЦІНУ (якщо її немає, ставимо 1 за замовчуванням)
+    
     topic = "стосунки" if reading_key == "relationship" else "кар'єра"
 
     wait_text = "🔮 <i>Розкладаю карти...</i>"
@@ -227,5 +226,31 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         text = ""
 
     await msg.delete()
+    
+    # 👇 ЛОГІКА ПОВЕРНЕННЯ КОШТІВ (REFUND)
+    if not text:
+        is_admin = message.from_user.id in ADMIN_IDS
+        
+        # Якщо це не адмін, повертаємо зірки в базу
+        if not is_admin:
+            try:
+                await increment_balance(db, message.from_user.id, price)
+                refund_note = f"Твої <b>{price} ⭐️ автоматично повернуто</b> на баланс."
+            except Exception as e:
+                print(f"Refund Error: {e}")
+                refund_note = "Звернись до підтримки щодо балансу."
+        else:
+            refund_note = "(Admin Mode: баланс не змінювався)"
+
+        # Відправляємо заспокійливе повідомлення
+        error_msg = (
+            "🌪 <i>Магічний ефір раптово перервався... Карти не захотіли говорити.</i>\n\n"
+            f"Не хвилюйся. {refund_note} Спробуй запитати ще раз за кілька хвилин."
+        )
+        await message.answer(error_msg, reply_markup=main_menu_kb())
+        await state.clear()
+        return
+
+    # Якщо текст згенерувався успішно:
     await _send_long(message, text, reply_markup=main_menu_kb())
     await state.clear()
