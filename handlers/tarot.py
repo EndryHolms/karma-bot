@@ -30,9 +30,9 @@ ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit(
 FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. Обери тему нижче 👇</i>"
 
 # 👇 ДОДАНО ВІЗУАЛІЗАЦІЮ (Посилання на картинки) 👇
-IMG_DAILY = "https://images.unsplash.com/photo-1633422650059-715ee2755a95?auto=format&fit=crop&w=800&q=80" # Карти таро
-IMG_LOVE = "https://images.unsplash.com/photo-1618331835717-801e976710b2?auto=format&fit=crop&w=800&q=80" # Містична любовна атмосфера
-IMG_CAREER = "https://images.unsplash.com/photo-1606189207264-585b46b28038?auto=format&fit=crop&w=800&q=80" # Успіх, монети, карти
+IMG_DAILY = "https://i.postimg.cc/FHKrfNp0/b-A-richly-detailed-Ta-1.png" # Карти таро
+IMG_LOVE = "https://i.postimg.cc/QtgG4ymq/b-A-richly-detailed-Ta-2.png" # Містична любовна атмосфера
+IMG_CAREER = "https://i.postimg.cc/dQBcGgLt/b-A-richly-detailed-Ta-3.png" # Успіх, монети, карти
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
