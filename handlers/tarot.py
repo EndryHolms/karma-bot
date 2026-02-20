@@ -29,10 +29,10 @@ ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit(
 
 FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. Обери тему нижче 👇</i>"
 
-# 👇 ДОДАНО ВІЗУАЛІЗАЦІЮ (Посилання на картинки) 👇
-IMG_DAILY = "https://i.postimg.cc/FHKrfNp0/b-A-richly-detailed-Ta-1.png" # Карти таро
-IMG_LOVE = "https://i.postimg.cc/xTZP1Png/b-A-richly-detailed-Ta-2.png" # Містична любовна атмосфера
-IMG_CAREER = "https://i.postimg.cc/pdfQkb8Z/b-A-richly-detailed-Ta-3.png" # Успіх, монети, карти
+# Картинки
+IMG_DAILY = "https://images.unsplash.com/photo-1633422650059-715ee2755a95?auto=format&fit=crop&w=800&q=80"
+IMG_LOVE = "https://images.unsplash.com/photo-1618331835717-801e976710b2?auto=format&fit=crop&w=800&q=80"
+IMG_CAREER = "https://images.unsplash.com/photo-1606189207264-585b46b28038?auto=format&fit=crop&w=800&q=80"
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
@@ -115,7 +115,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         
         if callback.message:
             if text:
-                # 👇 ДОДАНО: Відправка картинки перед текстом
                 await callback.message.answer_photo(photo=IMG_DAILY, caption="✨ <i>Енергія дня вже тут...</i>")
                 await _send_long(callback.message, text, reply_markup=main_menu_kb())
             else:
@@ -131,8 +130,9 @@ async def relationship_reading(callback: CallbackQuery, state: FSMContext, db: f
         callback=callback, state=state, db=db, 
         price=RELATIONSHIP_PRICE, 
         reading_key="relationship",
-        title="Розклад: Любов ❤️",
-        description="Аналіз стосунків, почуттів та перспектив."
+        # 👇 ТУТ ЗМІНЕНО: Назва точно як на кнопці
+        title="Любов та Стосунки ❤️",
+        description="Аналіз почуттів, думок партнера та майбутнього."
     )
 
 
@@ -142,8 +142,9 @@ async def career_reading(callback: CallbackQuery, state: FSMContext, db: firesto
         callback=callback, state=state, db=db, 
         price=CAREER_PRICE, 
         reading_key="career",
-        title="Розклад: Кар'єра 💰",
-        description="Аналіз фінансів, роботи та проектів."
+        # 👇 ТУТ ЗМІНЕНО: Назва точно як на кнопці
+        title="Гроші та Реалізація 💰",
+        description="Аналіз фінансів, кар'єрного росту та проектів."
     )
 
 
@@ -253,10 +254,7 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         await state.clear()
         return
 
-    # 👇 ДОДАНО: Відправка картинки залежно від обраної теми
     img_to_send = IMG_LOVE if reading_key == "relationship" else IMG_CAREER
     await message.answer_photo(photo=img_to_send, caption="✨ <i>Карти лягли на стіл...</i>")
-    
-    # Відправляємо сам текст розкладу
     await _send_long(message, text, reply_markup=main_menu_kb())
     await state.clear()
