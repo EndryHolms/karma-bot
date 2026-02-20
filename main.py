@@ -15,6 +15,9 @@ from config import load_settings
 from firebase_db import init_firestore
 from middleware import ThrottlingMiddleware
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from notifications import send_daily_reminders
+
 # Імпорти роутерів
 from handlers.advice import router as advice_router
 from handlers.payment import router as payment_router
@@ -104,6 +107,13 @@ async def main() -> None:
     # Запускаємо сервер в фоні (task), щоб не блокувати бота
     web_task = asyncio.create_task(_run_web_server(port))
     logging.info(f"🌍 Web server started on port {port}")
+
+    # 👇 ДОДАЄМО ПЛАНУВАЛЬНИК 👇
+    scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
+    # Налаштовуємо запуск щодня о 12:00 (за Києвом)
+    scheduler.add_job(send_daily_reminders, trigger='cron', hour=12, minute=0, args=[bot, db])
+    scheduler.start()
+    logging.info("⏰ Планувальник завдань запущено.")
 
     try:
         await dp.start_polling(bot)
