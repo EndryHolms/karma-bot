@@ -31,7 +31,7 @@ FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти
 
 # 👇 ДОДАНО ВІЗУАЛІЗАЦІЮ (Посилання на картинки) 👇
 IMG_DAILY = "https://i.postimg.cc/FHKrfNp0/b-A-richly-detailed-Ta-1.png" # Карти таро
-IMG_LOVE = "https://i.postimg.cc/QtgG4ymq/b-A-richly-detailed-Ta-2.png" # Містична любовна атмосфера
+IMG_LOVE = "https://i.postimg.cc/9fRt9wFC/b-A-richly-detailed-Ta-2.png" # Містична любовна атмосфера
 IMG_CAREER = "https://i.postimg.cc/dQBcGgLt/b-A-richly-detailed-Ta-3.png" # Успіх, монети, карти
 
 class ReadingStates(StatesGroup):

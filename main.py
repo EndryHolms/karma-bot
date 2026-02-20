@@ -13,6 +13,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import load_settings
 from firebase_db import init_firestore
+from middleware import ThrottlingMiddleware
 
 # Імпорти роутерів
 from handlers.advice import router as advice_router
@@ -80,6 +81,15 @@ async def main() -> None:
     )
 
     dp = Dispatcher(storage=MemoryStorage())
+
+    # 👇 ДОДАЙ ЦІ ДВА РЯДКИ:
+    # Вмикаємо ліміт 3 секунди на текстові повідомлення та кліки по кнопках
+    dp.message.middleware(ThrottlingMiddleware(rate_limit=3.0))
+    dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=3.0))
+
+    # Передаємо моделі в хендлери
+    dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)
+    # ... далі код йде без змін ...
     
     # Передаємо моделі в хендлери
     dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)
