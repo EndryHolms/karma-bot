@@ -11,7 +11,7 @@ CB_BACK_MENU = "back_to_menu"
 def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         # 👇 Змінено за вашим проханням
-        [InlineKeyboardButton(text="✨ Карта дня (Free)", callback_data=CB_DAILY)],
+        [InlineKeyboardButton(text="✨ Карта дня (Безкоштовно)", callback_data=CB_DAILY)],
         
         # 👇 Ваші нові назви зі скріншота
         [InlineKeyboardButton(text="❤️ Любов та Стосунки (75 ⭐️)", callback_data=CB_RELATIONSHIP)],
