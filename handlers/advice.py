@@ -17,7 +17,7 @@ from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 router = Router()
 
 ADVICE_PRICE = 1
-IMG_ADVICE = "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80" # Космос/зірки
+IMG_ADVICE = "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png" # Космос/зірки
 
 # Адміни з змінних оточення
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
@@ -39,7 +39,12 @@ async def _gemini_text(model: Any, prompt: str) -> str:
 @router.callback_query(F.data == CB_ADVICE)
 async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
     if not callback.from_user: return
-    await ensure_user(db, callback.from_user.id, callback.from_user.username or "", callback.from_user.first_name or "")
+    await ensure_user(
+        db, 
+        user_id=callback.from_user.id, 
+        username=callback.from_user.username or "", 
+        first_name=callback.from_user.first_name or ""
+    )
     await callback.answer()
 
     is_admin = callback.from_user.id in ADMIN_IDS
