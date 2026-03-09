@@ -14,7 +14,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from firebase_admin import firestore
 
-# 👇 Наші нові імпорти
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance, get_user_language
 from lexicon import get_text
 from handlers.payment import send_stars_invoice
@@ -96,7 +95,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     user_id = str(callback.from_user.id)
     await ensure_user(db, user_id=callback.from_user.id, username=callback.from_user.username or "", first_name=callback.from_user.first_name or "")
     
-    # Визначаємо мову
     lang = await get_user_language(db, callback.from_user.id)
 
     is_admin = callback.from_user.id in ADMIN_IDS
@@ -119,7 +117,6 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
     
-   # 👇 Жорстка вказівка перекладати всі заголовки
     prompt = f"Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
     
     try:
@@ -131,9 +128,14 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         
         if callback.message:
             if text:
-                # 👇 Беремо правильну картинку для обраної мови
                 current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
                 await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
+                await _send_long(callback.message, text, reply_markup=main_menu_kb(lang), lang=lang)
+            else:
+                await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
+    except Exception as e:
+        print(f"Daily Handler Error: {e}")
+        await msg.edit_text(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
 
 
 @router.callback_query(F.data == CB_RELATIONSHIP)
@@ -241,10 +243,9 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         await state.clear()
         return
 
-    # 👇 Підставляємо правильну картинку з потрібного словника
     img_dict = IMAGES_LOVE if reading_key == "relationship" else IMAGES_CAREER
     img_to_send = img_dict.get(lang, img_dict["uk"])
-    
+
     await message.answer_photo(photo=img_to_send, caption=get_text(lang, "cards_on_table"), parse_mode="HTML")
     await _send_long(message, text, reply_markup=main_menu_kb(lang), lang=lang)
     await state.clear()
