@@ -56,27 +56,31 @@ from firebase_admin import firestore
 
 # ... (функція send_daily_reminders залишається без змін) ...
 
+import logging
+import asyncio
+from datetime import datetime
+import pytz
+from aiogram import Bot
+from firebase_admin import firestore
+from keyboards import horoscope_share_menu_kb
+
 async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     logging.info("Починаю генерацію та розсилку гороскопів...")
     
+    # 🕒 Отримуємо сьогоднішню дату (за Києвом) у форматі "09.03"
+    tz = pytz.timezone('Europe/Kyiv')
+    today_date = datetime.now(tz).strftime("%d.%m")
+    
+    # 👇 Оновлений, максимально короткий промпт
     prompt = (
-        "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку. "
-        "Стиль: сарказм, втома від роботи, жарти про гроші, погоду та колишніх. "
-        "УВАГА: СУВОРО ЗАБОРОНЕНО використовувати Markdown зірочки (**) для виділення тексту! "
-        "Для жирного шрифту використовуй ТІЛЬКИ HTML-теги <b>текст</b>. "
-        "Усі заголовки пиши виключно українською мовою. "
-        "Обов'язково роби порожній рядок (подвійний Enter) між кожним знаком зодіаку та між блоками тексту. "
-        "Структура твоєї відповіді має бути точно такою:\n\n"
-        "[Твій містично-іронічний вступ]\n\n"
-        "🎴 <b>Карти:</b> [назви 3 карт та їх іронічне значення]\n\n"
-        "👁 <b>Твій гороскоп:</b>\n\n"
-        "♈ Овен - текст...\n\n"
-        "♉ Телець - текст...\n\n"
-        "[...і так для всіх 12 знаків...]\n\n"
-        "✨ <b>Порада від Karma:</b>\n"
-        "[текст поради]\n\n"
-        "🌌 <b>Афірмація:</b>\n"
-        "[текст афірмації]"
+        "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку (по одному короткому реченню). "
+        "Стиль: сарказм, втома від роботи, жарти про гроші, погоду та стосунки. "
+        "СУВОРА УМОВА: Жодного тексту до чи після знаків! Без вступів, без висновків, без зірочок Markdown. "
+        "Тільки 12 рядків. Обов'язково роби порожній рядок (Enter) між знаками. "
+        "Формат має бути точно таким:\n"
+        "♈ Овен - [твій жарт]\n\n"
+        "♉ Телець - [твій жарт]\n\n"
+        "...і так для всіх 12 знаків."
     )
     
     try:
@@ -89,17 +93,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     if not raw_text:
         return
 
-    # === ЛОГІКА РОЗДІЛЕННЯ ТЕКСТУ ПО ЗНАКАХ ===
-    
-    # 1. Знаходимо вступ (до першого знака зодіаку)
-    intro_match = re.split(r'♈|♉|♊|♋|♌|♍|♎|♏|♐|♑|♒|♓', raw_text, maxsplit=1)
-    intro = intro_match[0].strip() if len(intro_match) > 1 else ""
-
-    # 2. Знаходимо кінцівку (Порада та Афірмація)
-    outro_match = re.split(r'✨\s*<b>Порада', raw_text, maxsplit=1)
-    outro = "✨ <b>Порада" + outro_match[1].strip() if len(outro_match) > 1 else ""
-
-    # 3. Витягуємо рядок для кожного конкретного знаку
+    # === ЛОГІКА РОЗДІЛЕННЯ ТЕКСТУ ===
     signs_mapping = {
         "aries": "Овен", "taurus": "Телець", "gemini": "Близнюки",
         "cancer": "Рак", "leo": "Лев", "virgo": "Діва",
@@ -107,7 +101,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
         "capricorn": "Козер", "aquarius": "Водолій", "pisces": "Риби"
     }
     
-    user_horoscopes = {"all": raw_text} # Для тих, хто не обрав знак
+    user_horoscopes = {"all": raw_text} # Якщо юзер обрав "Всі знаки"
     
     lines = raw_text.split('\n')
     for key, name in signs_mapping.items():
@@ -117,11 +111,8 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
                 sign_line = line.strip()
                 break
         
-        # Склеюємо персональний гороскоп: Вступ + Конкретний знак + Кінцівка
-        if sign_line and outro:
-            user_horoscopes[key] = f"{intro}\n\n{sign_line}\n\n{outro}"
-        else:
-            user_horoscopes[key] = raw_text # Запасний варіант
+        # Якщо юзер обрав конкретний знак, він отримає ТІЛЬКИ цей рядок
+        user_horoscopes[key] = sign_line if sign_line else raw_text
 
     # === РОЗСИЛКА КОРИСТУВАЧАМ ===
     users_ref = db.collection("users").stream()
@@ -131,21 +122,21 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
         user_data = doc.to_dict() or {}
         user_id = doc.id
         
-        # Беремо знак юзера (або "all" за замовчуванням)
         zodiac_pref = user_data.get("zodiac_sign", "all")
         text_to_send = user_horoscopes.get(zodiac_pref, user_horoscopes["all"])
         
-        final_message = f"🔮 <b>Щоденний Кармічний Гороскоп</b>\n\n{text_to_send}"
+        # 👇 Додаємо наш новий лаконічний заголовок з датою
+        final_message = f"🔮 <b>Кармічний гороскоп на {today_date}:</b>\n\n{text_to_send}"
         
         try:
-            # 1. Відправляємо ТЕКСТ гороскопу (БЕЗ МЕНЮ, щоб він не зникав)
+            # 1. Відправляємо текст
             await bot.send_message(
                 chat_id=user_id, 
                 text=final_message, 
                 parse_mode="HTML"
             )
             
-            # 2. Відправляємо МЕНЮ окремим маленьким повідомленням під гороскопом
+            # 2. Відправляємо меню
             await bot.send_message(
                 chat_id=user_id, 
                 text="💫 <i>Що підказує твоя інтуїція далі?</i> 👇", 
@@ -153,7 +144,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
                 parse_mode="HTML"
             )
             count += 1
-            await asyncio.sleep(0.1) # Захист від блокування
+            await asyncio.sleep(0.1)
         except Exception:
             pass
 
