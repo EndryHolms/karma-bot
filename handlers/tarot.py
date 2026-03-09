@@ -17,10 +17,9 @@ from firebase_db import (
     increment_balance,
 )
 from keyboards import (
-    CB_TAROT_3_CARDS,
-    CB_TAROT_CAREER,
-    CB_TAROT_DAILY_CARD,
-    CB_TAROT_LOVE,
+    CB_CAREER,
+    CB_DAILY,
+    CB_RELATIONSHIP,
     back_to_menu_kb,
     main_menu_kb,
 )
@@ -38,27 +37,24 @@ class TarotForm(StatesGroup):
     question = State()
 
 
-PRICES = {CB_TAROT_3_CARDS: 2, CB_TAROT_LOVE: 3, CB_TAROT_CAREER: 3}
+PRICES = {CB_RELATIONSHIP: 3, CB_CAREER: 3}
 
 # Мультимовні картинки для розкладів
 IMAGES_TAROT = {
     "uk": {
-        CB_TAROT_DAILY_CARD: "https://i.postimg.cc/kG6N0s03/image.png",
-        CB_TAROT_3_CARDS: "https://i.postimg.cc/fW6W4G2v/b-A-richly-detailed-Ta-1.png",
-        CB_TAROT_LOVE: "https://i.postimg.cc/8PJHMgM9/b-A-richly-detailed-Ta-2.png",
-        CB_TAROT_CAREER: "https://i.postimg.cc/j2yN5sxm/b-A-richly-detailed-Ta-3.png",
+        CB_DAILY: "https://i.postimg.cc/kG6N0s03/image.png",
+        CB_RELATIONSHIP: "https://i.postimg.cc/8PJHMgM9/b-A-richly-detailed-Ta-2.png",
+        CB_CAREER: "https://i.postimg.cc/j2yN5sxm/b-A-richly-detailed-Ta-3.png",
     },
     "en": {
-        CB_TAROT_DAILY_CARD: "https://i.postimg.cc/FzXfSgpM/image.png",
-        CB_TAROT_3_CARDS: "https://i.postimg.cc/50v2p69b/b-A-richly-detailed-Ta-1-en.png",
-        CB_TAROT_LOVE: "https://i.postimg.cc/Pq0wWJRL/b-A-richly-detailed-Ta-2-en.png",
-        CB_TAROT_CAREER: "https://i.postimg.cc/1zW1LzNn/b-A-richly-detailed-Ta-3-en.png",
+        CB_DAILY: "https://i.postimg.cc/FzXfSgpM/image.png",
+        CB_RELATIONSHIP: "https://i.postimg.cc/Pq0wWJRL/b-A-richly-detailed-Ta-2-en.png",
+        CB_CAREER: "https://i.postimg.cc/1zW1LzNn/b-A-richly-detailed-Ta-3-en.png",
     },
     "ru": {
-        CB_TAROT_DAILY_CARD: "https://i.postimg.cc/kG6N0s03/image.png", # Залишимо українську
-        CB_TAROT_3_CARDS: "https://i.postimg.cc/vH2kTSb9/b-A-richly-detailed-Ta-1-ru.png",
-        CB_TAROT_LOVE: "https://i.postimg.cc/y8p06v5v/b-A-richly-detailed-Ta-2-ru.png",
-        CB_TAROT_CAREER: "https://i.postimg.cc/wMP51G1C/b-A-richly-detailed-Ta-3-ru.png",
+        CB_DAILY: "https://i.postimg.cc/kG6N0s03/image.png", # Залишимо українську
+        CB_RELATIONSHIP: "https://i.postimg.cc/y8p06v5v/b-A-richly-detailed-Ta-2-ru.png",
+        CB_CAREER: "https://i.postimg.cc/wMP51G1C/b-A-richly-detailed-Ta-3-ru.png",
     },
 }
 
@@ -77,7 +73,7 @@ async def _gemini_text(model: Any, prompt: str, system_instruction: str) -> str:
 
 
 @router.callback_query(
-    F.data.in_([CB_TAROT_3_CARDS, CB_TAROT_LOVE, CB_TAROT_CAREER, CB_TAROT_DAILY_CARD])
+    F.data.in_([CB_RELATIONSHIP, CB_CAREER, CB_DAILY])
 )
 async def tarot_reading_start(
     callback: CallbackQuery, state: FSMContext, db: firestore.Client
@@ -99,7 +95,7 @@ async def tarot_reading_start(
     is_admin = callback.from_user.id in ADMIN_IDS
 
     # Карта дня безкоштовна
-    if callback.data == CB_TAROT_DAILY_CARD:
+    if callback.data == CB_DAILY:
         await state.update_data(reading_type=callback.data, price=0)
         # Переходимо одразу до обробки, минаючи запитання
         await tarot_reading_process(callback, state, db)
@@ -109,14 +105,12 @@ async def tarot_reading_start(
         balance = await get_balance(db, callback.from_user.id)
         if balance < price:
             invoice_titles = {
-                CB_TAROT_3_CARDS: get_text(lang, "invoice_tarot3_title"),
-                CB_TAROT_LOVE: get_text(lang, "invoice_love_title"),
-                CB_TAROT_CAREER: get_text(lang, "invoice_career_title"),
+                CB_RELATIONSHIP: get_text(lang, "invoice_love_title"),
+                CB_CAREER: get_text(lang, "invoice_career_title"),
             }
             invoice_descriptions = {
-                CB_TAROT_3_CARDS: get_text(lang, "invoice_tarot3_desc"),
-                CB_TAROT_LOVE: get_text(lang, "invoice_love_desc"),
-                CB_TAROT_CAREER: get_text(lang, "invoice_career_desc"),
+                CB_RELATIONSHIP: get_text(lang, "invoice_love_desc"),
+                CB_CAREER: get_text(lang, "invoice_career_desc"),
             }
             await send_stars_invoice(
                 callback=callback,
@@ -160,10 +154,10 @@ async def tarot_reading_process(
     lang = await get_user_language(db, user_id)
     data = await state.get_data()
     price = data.get("price", 0)
-    reading_type = data.get("reading_type", CB_TAROT_DAILY_CARD)
+    reading_type = data.get("reading_type", CB_DAILY)
 
     # Для "Карти дня" питання не потрібне, використовуємо стандартне
-    if reading_type == CB_TAROT_DAILY_CARD:
+    if reading_type == CB_DAILY:
         user_question = get_text(lang, "daily_card_question")
     else:
         user_question = event.text if is_message else ""
@@ -210,10 +204,9 @@ async def tarot_reading_process(
     image_url = lang_images.get(reading_type, "")
 
     caption_keys = {
-        CB_TAROT_DAILY_CARD: "daily_card_caption",
-        CB_TAROT_3_CARDS: "tarot_3_cards_caption",
-        CB_TAROT_LOVE: "love_reading_caption",
-        CB_TAROT_CAREER: "career_reading_caption",
+        CB_DAILY: "daily_card_caption",
+        CB_RELATIONSHIP: "love_reading_caption",
+        CB_CAREER: "career_reading_caption",
     }
     caption = get_text(lang, caption_keys.get(reading_type, ""))
 
