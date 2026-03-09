@@ -10,7 +10,7 @@ LEXICON = {
         "btn_back": "🔙 Назад в меню",
         "choose_language": "🇺🇦 Оберіть мову:\n🇬🇧 Choose your language:\n🏳️ Выберите язык:",
         "lang_saved": "✅ Мову збережено!",
-        "welcome_text": "🌌 <b>Вітаю у просторі Karma!</b>\n\nЯ твій містичний провідник. Обери, що підказує тобі інтуїція на сьогодні 👇"
+        "welcome_text": "Вітаю, <b>{name}</b>. Я — Karma.\n\nЯ тут, щоб освітити твій шлях, коли стає темно. Пам'ятай: карти не вирішують за тебе, вони лише показують вірогідності.\n\nЩо турбує твою душу сьогодні?"
     },
     "en": {
         "menu_daily": "✨ Card of the Day (Free)",
@@ -21,7 +21,7 @@ LEXICON = {
         "btn_back": "🔙 Back to Menu",
         "choose_language": "🇺🇦 Оберіть мову:\n🇬🇧 Choose your language:\n🏳️ Выберите язык:",
         "lang_saved": "✅ Language saved!",
-        "welcome_text": "🌌 <b>Welcome to the Karma space!</b>\n\nI am your mystical guide. Choose what your intuition tells you today 👇"
+        "welcome_text": "Welcome, <b>{name}</b>. I am Karma.\n\nI am here to illuminate your path when it gets dark. Remember: cards don't make decisions for you, they only show probabilities.\n\nWhat troubles your soul today?"
     },
     "ru": {
         "menu_daily": "✨ Карта дня (Бесплатно)",
@@ -32,10 +32,9 @@ LEXICON = {
         "btn_back": "🔙 Назад в меню",
         "choose_language": "🇺🇦 Оберіть мову:\n🇬🇧 Choose your language:\n🏳️ Выберите язык:",
         "lang_saved": "✅ Язык сохранен!",
-        "welcome_text": "🌌 <b>Добро пожаловать в пространство Karma!</b>\n\nЯ твой мистический проводник. Выбери, что подсказывает тебе интуиция сегодня 👇"
+        "welcome_text": "Приветствую, <b>{name}</b>. Я — Karma.\n\nЯ здесь, чтобы осветить твой путь, когда становится темно. Помни: карты не решают за тебя, они лишь показывают вероятности.\n\nЧто тревожит твою душу сегодня?"
     }
 }
 
 def get_text(lang: str, key: str) -> str:
-    """Функція для безпечного отримання перекладу."""
     return LEXICON.get(lang, LEXICON["uk"]).get(key, LEXICON["uk"].get(key, key))

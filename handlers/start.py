@@ -40,22 +40,33 @@ async def command_start(message: Message, db: firestore.Client) -> None:
 async def process_language_selection(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user: return
     
-    # Витягуємо обрану мову (uk, en або ru)
+    # Витягуємо обрану мову
     lang = callback.data.split(":")[1]
     
     # Зберігаємо в базу
     await update_user_language(db, callback.from_user.id, lang)
     
-    # Відповідаємо спливаючим вікном на обраній мові
+    # Відповідаємо спливаючим вікном
     await callback.answer(get_text(lang, "lang_saved"))
     
-    # Видаляємо повідомлення з вибором мови і показуємо головне меню!
+    # Видаляємо повідомлення з вибором мови
     await callback.message.delete()
     
-    # ВАЖЛИВО: цей блок має бути на одному рівні з попередніми рядками
-    await callback.message.answer(
-        get_text(lang, "welcome_text"),
-        reply_markup=main_menu_kb(lang)
+    # Отримуємо ім'я користувача для привітання
+    user_name = callback.from_user.first_name or "душе"
+    
+    # Підставляємо ім'я у текст зі словника
+    welcome_text = get_text(lang, "welcome_text").format(name=user_name)
+    
+    # 👇 ВСТАВ СЮДИ ПОСИЛАННЯ НА СВОЮ ОРИГІНАЛЬНУ КАРТИНКУ 👇
+    IMG_WELCOME = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png" 
+    
+    # Відправляємо КАРТИНКУ з текстом і меню
+    await callback.message.answer_photo(
+        photo=IMG_WELCOME,
+        caption=welcome_text,
+        reply_markup=main_menu_kb(lang),
+        parse_mode="HTML"
     )
 
 
