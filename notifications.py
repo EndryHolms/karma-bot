@@ -47,23 +47,24 @@ async def send_daily_reminders(bot: Bot, db: firestore.Client):
                 
     logging.info(f"Нагадування успішно надіслано {count} користувачам.")
     # Онови імпорти зверху
-from keyboards import main_menu_kb, broadcast_horoscope_kb
+from keyboards import main_menu_kb, horoscope_share_menu_kb # Оновлений імпорт
 
-# ... (тут твоя функція send_daily_reminders) ...
+# ... (функція send_daily_reminders залишається без змін) ...
 
 async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     logging.info("Починаю генерацію та розсилку гороскопів...")
     
+    # 👇 ОНОВЛЕНИЙ ПРОМПТ З ЖОРСТКИМ ФОРМАТУВАННЯМ
     prompt = (
         "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку. "
         "Стиль: сарказм, втома від роботи, жарти про гроші, погоду та колишніх. Мінімум води. "
-        "Формат строго такий: кожен знак з нового рядка, починається з емодзі, назви знаку та дефісу. Наприклад:\n"
-        "♈ Овен - ви за здоровий спосіб життя, але сьогодні пʼятниця\n"
-        "♉ Телець - ви повідомлення від колишніх так не чекали, як весну\n"
-        "Згенеруй для всіх 12 знаків."
+        "ВАЖЛИВО: Обов'язково роби порожній рядок (подвійний Enter) між кожним знаком зодіаку та між заголовками, щоб текст не злипався! "
+        "Формат строго такий:\n\n"
+        "♈ Овен - текст...\n\n"
+        "♉ Телець - текст...\n\n"
+        "Згенеруй для всіх 12 знаків. Додай на початку містично-іронічний вступ, а в кінці 'Karma's Advice' та 'Affirmation'."
     )
     
-    # 1. Запитуємо Gemini (всього 1 запит!)
     try:
         response = await asyncio.to_thread(tarot_model.generate_content, prompt)
         raw_text = getattr(response, "text", "").strip()
@@ -74,46 +75,22 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     if not raw_text:
         return
 
-    # 2. Розбираємо текст по знаках
-    signs_mapping = {
-        "aries": "Овен", "taurus": "Телець", "gemini": "Близнюки",
-        "cancer": "Рак", "leo": "Лев", "virgo": "Діва",
-        "libra": "Терези", "scorpio": "Скорпіон", "sagittarius": "Стрілець",
-        "capricorn": "Козер", "aquarius": "Водолій", "pisces": "Риби"
-    }
+    # Формуємо фінальне повідомлення
+    final_message = f"🔮 <b>Щоденний Кармічний Гороскоп</b>\n\n{raw_text}"
     
-    horoscope_dict = {"all": raw_text} # Для тих, хто хоче всі знаки
-    
-    # Шукаємо потрібний рядок для кожного знаку
-    for key, ukr_name in signs_mapping.items():
-        for line in raw_text.split('\n'):
-            if ukr_name in line:
-                horoscope_dict[key] = line.strip()
-                break
-
-    # 3. Робимо розсилку користувачам
+    # Робимо розсилку
     users_ref = db.collection("users").stream()
     count = 0
     
     for doc in users_ref:
-        user_data = doc.to_dict()
         user_id = doc.id
-        zodiac_pref = user_data.get("zodiac_sign", "all")
-        
-        # Визначаємо, що відправляти
-        text_to_send = horoscope_dict.get(zodiac_pref)
-        
-        # Якщо чомусь не знайшли конкретний рядок, відправляємо загальний
-        if not text_to_send:
-            text_to_send = horoscope_dict["all"]
-
-        final_message = f"🔮 <b>Щоденний Кармічний Гороскоп</b>\n\n{text_to_send}"
-        
-        # Якщо юзер отримує всі знаки, додаємо йому кнопку "Налаштувати свій"
-        reply_markup = broadcast_horoscope_kb() if zodiac_pref == "all" else None
-
         try:
-            await bot.send_message(chat_id=user_id, text=final_message, reply_markup=reply_markup)
+            # 👇 Відправляємо текст + нову клавіатуру з кнопкою "Поділитися"
+            await bot.send_message(
+                chat_id=user_id, 
+                text=final_message, 
+                reply_markup=horoscope_share_menu_kb()
+            )
             count += 1
             await asyncio.sleep(0.1) # Захист від блокування Телеграмом
         except Exception:

@@ -75,3 +75,21 @@ def zodiac_selection_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔙 Назад до профілю", callback_data="profile_balance")]
     ])
     return kb
+
+def horoscope_share_menu_kb() -> InlineKeyboardMarkup:
+    """Клавіатура для гороскопу: Поділитися + Головне меню"""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        # 👇 Кнопка поділитися (відкриває список контактів у Telegram)
+        [InlineKeyboardButton(
+            text="🚀 Поділитися з друзями", 
+            url="https://t.me/share/url?url=https://t.me/gokarma_bot&text=🔮%20Заходь%20читати%20свій%20кармічний%20гороскоп!%20Він%20сьогодні%20дуже%20життєвий%20😅"
+        )],
+        
+        # 👇 Звичайне головне меню
+        [InlineKeyboardButton(text="✨ Карта дня (Безкоштовно)", callback_data=CB_DAILY)],
+        [InlineKeyboardButton(text="❤️ Любов та Стосунки (75 ⭐️)", callback_data=CB_RELATIONSHIP)],
+        [InlineKeyboardButton(text="💰 Гроші та Реалізація (100 ⭐️)", callback_data=CB_CAREER)],
+        [InlineKeyboardButton(text="🧘 Порада Всесвіту (25 ⭐️)", callback_data=CB_ADVICE)],
+        [InlineKeyboardButton(text="👤 Моя карма (баланс)", callback_data=CB_PROFILE)],
+    ])
+    return kb
