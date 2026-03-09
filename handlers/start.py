@@ -71,11 +71,21 @@ async def process_language_selection(callback: CallbackQuery, db: firestore.Clie
 
 
 @router.callback_query(F.data == CB_BACK_MENU)
-async def back_to_menu(callback: CallbackQuery) -> None:
-    # Кнопка "Назад" може видаляти старе повідомлення, щоб не засмічувати чат
+async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client) -> None:
+    """Обробник для кнопки 'Назад в меню'"""
+    if not callback.from_user: return
+    
+    # Витягуємо мову через нашу функцію
+    lang = await get_user_language(db, callback.from_user.id)
+    
+    text = get_text(lang, "main_menu_title")
+    kb = main_menu_kb(lang) # Передаємо мову в клавіатуру!
+
     if callback.message:
-        await callback.message.delete()
-        await callback.message.answer("Головне меню:", reply_markup=main_menu_kb())
+        try:
+            await callback.message.edit_text(text, reply_markup=kb)
+        except Exception:
+            await callback.message.answer(text, reply_markup=kb)
     await callback.answer()
 
 
@@ -87,24 +97,23 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
     doc = db.collection("users").document(user_id).get()
     user_data = doc.to_dict() or {}
     
+    # Витягуємо мову користувача (якщо немає - беремо 'uk')
+    lang = user_data.get("language", "uk")
+    
     balance = user_data.get("balance", 0)
     current_zodiac = user_data.get("zodiac_sign", "all")
-    zodiac_name = ZODIACS.get(current_zodiac, "🌌 Усі знаки")
+    
+    # Тимчасовий переклад для статусу "Усі знаки"
+    all_signs_translation = {"uk": "🌌 Усі знаки", "en": "🌌 All signs", "ru": "🌌 Все знаки"}
+    zodiac_name = ZODIACS.get(current_zodiac, all_signs_translation.get(lang, "🌌 Усі знаки"))
 
-    text = (
-        f"<b>🧘 Твій енергетичний баланс:</b>\n"
-        f"✨ Доступно зірок: <b>{balance} ⭐️</b>\n\n"
-        f"🔮 <b>Твій знак Зодіаку:</b> {zodiac_name}\n\n"
-        "<b>Як поповнити запаси?</b>\n"
-        "У Всесвіті діє закон обміну. Просто обери будь-який платний розклад...\n\n"
-        "<i>Енергія нікуди не зникає, вона лише змінює форму.</i>"
-    )
+    # Беремо текст профілю зі словника і підставляємо дані
+    text = get_text(lang, "profile_text").format(balance=balance, zodiac=zodiac_name)
 
-    # Додаємо кнопку "Налаштувати гороскоп" прямо під профіль
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     profile_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔮 Налаштувати гороскоп", callback_data=CB_CHANGE_ZODIAC)],
-        [InlineKeyboardButton(text="🔙 Назад в меню", callback_data=CB_BACK_MENU)]
+        [InlineKeyboardButton(text=get_text(lang, "btn_setup_horoscope"), callback_data=CB_CHANGE_ZODIAC)],
+        [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_BACK_MENU)]
     ])
 
     if callback.message:
