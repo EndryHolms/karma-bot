@@ -9,6 +9,8 @@ class Settings:
     bot_token: str
     gemini_api_key: str
     firebase_cred_path: str
+    primary_model_name: str
+    fallback_model_name: str
 
 
 def load_settings() -> Settings:
@@ -17,6 +19,8 @@ def load_settings() -> Settings:
     bot_token = os.getenv("BOT_TOKEN", "").strip()
     gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
     firebase_cred_path = os.getenv("FIREBASE_CRED_PATH", "").strip()
+    primary_model_name = os.getenv("PRIMARY_MODEL_NAME", "gemini-1.5-flash-latest").strip()
+    fallback_model_name = os.getenv("FALLBACK_MODEL_NAME", "gemini-1.5-pro-latest").strip()
 
     missing = [
         name
@@ -34,4 +38,6 @@ def load_settings() -> Settings:
         bot_token=bot_token,
         gemini_api_key=gemini_api_key,
         firebase_cred_path=firebase_cred_path,
+        primary_model_name=primary_model_name,
+        fallback_model_name=fallback_model_name,
     )
