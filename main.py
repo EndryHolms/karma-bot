@@ -4,7 +4,7 @@ import os
 import sys
 
 
-# 👇 Використовуємо перевірену бібліотеку
+# Використовуємо перевірену бібліотеку
 import google.generativeai as genai
 from aiohttp import web
 from aiogram import Bot, Dispatcher
@@ -80,10 +80,10 @@ async def main() -> None:
     # Ініціалізація бази даних
     db = await init_firestore(settings.firebase_cred_path)
 
-    # 👇 КОНФІГУРАЦІЯ GEMINI
+    # КОНФІГУРАЦІЯ GEMINI
     genai.configure(api_key=settings.gemini_api_key)
 
-    # 👇 ВАЖЛИВА ЗМІНА:
+    # ВАЖЛИВА ЗМІНА:
     # Використовуємо "gemini-1.5-flash" замість "2.5-lite".
     # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.
     # Ініціалізуємо стандартні моделі без підстраховки
@@ -106,7 +106,7 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
 
-    # 👇 ДОДАЙ ЦІ ДВА РЯДКИ:
+    # ДОДАЙ ЦІ ДВА РЯДКИ:
     # Вмикаємо ліміт 3 секунди на текстові повідомлення та кліки по кнопках
     dp.message.middleware(ThrottlingMiddleware(rate_limit=3.0))
     dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=3.0))
@@ -125,7 +125,7 @@ async def main() -> None:
     web_task = asyncio.create_task(_run_web_server(port))
     logging.info(f"🌍 Web server started on port {port}")
 
-    # 👇 ДОДАЄМО ПЛАНУВАЛЬНИК 👇
+    # ДОДАЄМО ПЛАНУВАЛЬНИК
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     # Налаштовуємо запуск щодня о 12:00 (за Києвом)
     scheduler.add_job(send_daily_reminders, trigger='cron', hour=12, minute=0, args=[bot, db])
