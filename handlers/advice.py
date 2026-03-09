@@ -9,7 +9,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from firebase_admin import firestore
 
-# 👇 Наші нові імпорти
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance, get_user_language
 from lexicon import get_text
 from handlers.payment import send_stars_invoice
@@ -25,6 +24,7 @@ IMAGES_ADVICE = {
     "en": "https://i.postimg.cc/vBtwWzf0/b_A_richly_detailed_Ta_4_en.png", # 👈 Встав посилання
     "ru": "https://i.postimg.cc/MTmJyDVs/b_A_richly_detailed_Ta_4_ru.png"  # 👈 Встав посилання
 }
+
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
@@ -52,7 +52,6 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
     )
     await callback.answer()
 
-    # Отримуємо мову користувача
     lang = await get_user_language(db, callback.from_user.id)
     is_admin = callback.from_user.id in ADMIN_IDS
 
@@ -88,24 +87,25 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
 async def advice_process(message: Message, state: FSMContext, advice_model: Any, db: firestore.Client) -> None:
     if not message.from_user: return
     
-    # Отримуємо мову
     lang = await get_user_language(db, message.from_user.id)
-    
     user_text = message.text or get_text(lang, "default_advice_request")
     
     data = await state.get_data()
     price = data.get("price", 1)
 
-    # Перекладений текст завантаження
+    # 👇 ОСЬ ЦЯ АНІМАЦІЯ ОЧІКУВАННЯ, ЯКА ЗНИКЛА
     msg = await message.answer(get_text(lang, "loading_advice"), reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
     
-    # ВКАЗІВКА ДЛЯ GEMINI ЯКОЮ МОВОЮ ВІДПОВІДАТИ
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
     
-    # 👇 Жорстка вказівка перекладати всі заголовки та текст
+    # Формуємо промпт
     prompt = f"Користувач запитує: '{user_text}'. Дай глибоку, філософську, але практичну пораду. Використовуй емодзі.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings or quotes) exclusively in {target_language} language!"
     
+    # 👇 ОСЬ ЦЕЙ РЯДОК БУВ ВИДАЛЕНИЙ (ГЕНЕРАЦІЯ ТЕКСТУ)
+    text = await _gemini_text(advice_model, prompt)
+    
+    # Видаляємо анімацію очікування
     await msg.delete()
 
     if not text:
@@ -117,16 +117,16 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
                 refund_note = get_text(lang, "refund_note").format(price=price)
             except: pass
         
-        # Перекладене повідомлення про помилку + повернення коштів
         silent_msg = get_text(lang, "universe_silent")
         await message.answer(f"{silent_msg} {refund_note}".strip(), reply_markup=main_menu_kb(lang), parse_mode="HTML")
         await state.clear()
         return
 
-# Відправка правильної картинки залежно від мови та тексту
+    # Відправка правильної картинки залежно від мови
     current_img = IMAGES_ADVICE.get(lang, IMAGES_ADVICE["uk"])
     await message.answer_photo(photo=current_img, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
     
+    # Відправлення самого тексту поради
     await message.answer(text, parse_mode="HTML")
     
     # Відправляємо меню
