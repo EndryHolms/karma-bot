@@ -86,16 +86,14 @@ async def main() -> None:
     # 👇 ВАЖЛИВА ЗМІНА:
     # Використовуємо "gemini-1.5-flash" замість "2.5-lite".
     # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.
-    # Використовуємо нашу розумну обгортку замість звичайного GenerativeModel
-    tarot_model = SafeGeminiModel(
-        primary_name="gemini-flash-latest",
-        fallback_name="gemini-3.1-pro-preview",
+    # Ініціалізуємо стандартні моделі без підстраховки
+    tarot_model = genai.GenerativeModel(
+        "gemini-flash-latest",
         system_instruction=KARMA_SYSTEM_PROMPT
     )
 
-    advice_model = SafeGeminiModel(
-        primary_name="gemini-flash-latest",
-        fallback_name="gemini-3.1-pro-preview",
+    advice_model = genai.GenerativeModel(
+        "gemini-flash-latest",
         system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT
     )
 
