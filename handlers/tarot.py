@@ -28,9 +28,23 @@ CAREER_PRICE = 1
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
-IMG_DAILY = "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png"
-IMG_LOVE = "https://i.postimg.cc/xTZP1Png/b_A_richly_detailed_Ta_2.png"
-IMG_CAREER = "https://i.postimg.cc/pdfQkb8Z/b_A_richly_detailed_Ta_3.png"
+IMAGES_DAILY = {
+    "uk": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png",
+    "en": "https://i.postimg.cc/jS1x5Z4t/b-A-richly-detailed-Ta-1-en.png", # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png"  # 👈 Встав посилання
+}
+
+IMAGES_LOVE = {
+    "uk": "https://i.postimg.cc/xTZP1Png/b_A_richly_detailed_Ta_2.png",
+    "en": "https://i.postimg.cc/wMFHdVjn/b_A_richly_detailed_Ta_2_en.png",   # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/nrTZtkh6/b_A_richly_detailed_Ta_2_ru.png"    # 👈 Встав посилання
+}
+
+IMAGES_CAREER = {
+    "uk": "https://i.postimg.cc/pdfQkb8Z/b_A_richly_detailed_Ta_3.png",
+    "en": "https://i.postimg.cc/nzGfvkBT/b_A_richly_detailed_Ta_3_en.png", # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/rmN2SJxQ/b_A_richly_detailed_Ta_3_ru.png"  # 👈 Встав посилання
+}
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
@@ -105,7 +119,8 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
     
-    prompt = f"Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response in {target_language} language!"
+   # 👇 Жорстка вказівка перекладати всі заголовки
+    prompt = f"Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
     
     try:
         text = await _gemini_generate_text(tarot_model, prompt)
@@ -116,13 +131,9 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         
         if callback.message:
             if text:
-                await callback.message.answer_photo(photo=IMG_DAILY, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
-                await _send_long(callback.message, text, reply_markup=main_menu_kb(lang), lang=lang)
-            else:
-                await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
-    except Exception as e:
-        print(f"Daily Handler Error: {e}")
-        await msg.edit_text(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
+                # 👇 Беремо правильну картинку для обраної мови
+                current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
+                await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
 
 
 @router.callback_query(F.data == CB_RELATIONSHIP)
@@ -204,11 +215,11 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         if message.voice:
             file_info = await bot.get_file(message.voice.file_id)
             audio_bytes = (await bot.download_file(file_info.file_path)).read()
-            prompt = f"Контекст про {topic} (голос). Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response in {target_language} language!"
+            prompt = f"Контекст про {topic} (голос). Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
             text = await _gemini_generate_with_audio(tarot_model, prompt, audio_bytes)
         else:
             user_text = message.text or ""
-            prompt = f"Контекст про {topic}: {user_text}. Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response in {target_language} language!"
+            prompt = f"Контекст про {topic}: {user_text}. Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
             text = await _gemini_generate_text(tarot_model, prompt)
     except Exception as e:
         print(f"Reading Context Error: {e}")
@@ -230,7 +241,10 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         await state.clear()
         return
 
-    img_to_send = IMG_LOVE if reading_key == "relationship" else IMG_CAREER
+    # 👇 Підставляємо правильну картинку з потрібного словника
+    img_dict = IMAGES_LOVE if reading_key == "relationship" else IMAGES_CAREER
+    img_to_send = img_dict.get(lang, img_dict["uk"])
+    
     await message.answer_photo(photo=img_to_send, caption=get_text(lang, "cards_on_table"), parse_mode="HTML")
     await _send_long(message, text, reply_markup=main_menu_kb(lang), lang=lang)
     await state.clear()
