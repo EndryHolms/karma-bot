@@ -45,7 +45,8 @@ LEXICON = {
         "loading_love_cards": "<i>Karma розкладає карти на: Ваші почуття, Приховані думки, Майбутнє...</i>",
         "cards_on_table": "✨ <i>Карти лягли на стіл...</i>",
         "magic_interrupted": "🌪 <i>Магічний ефір раптово перервався... Карти не захотіли говорити.</i>\n\nНе хвилюйся. {refund_note} Спробуй запитати ще раз за кілька хвилин.",
-        "refund_note_balance": "Твої <b>{price} ⭐️ автоматично повернуто</b> на баланс."
+        "refund_note_balance": "Твої <b>{price} ⭐️ автоматично повернуто</b> на баланс.", # <--- ОСЬ ТУТ ДОДАНО КОМУ
+        "magic_wait": "🧘 Зачекай... Магія не терпить поспіху."
     },
     "en": {
         "menu_daily": "✨ Card of the Day (Free)",
@@ -91,7 +92,8 @@ LEXICON = {
         "loading_love_cards": "<i>Karma is laying out the cards for: Your feelings, Hidden thoughts, Future...</i>",
         "cards_on_table": "✨ <i>The cards are on the table...</i>",
         "magic_interrupted": "🌪 <i>The magical ether was suddenly interrupted... The cards refused to speak.</i>\n\nDon't worry. {refund_note} Try asking again in a few minutes.",
-        "refund_note_balance": "Your <b>{price} ⭐️ have been automatically refunded</b> to your balance."
+        "refund_note_balance": "Your <b>{price} ⭐️ have been automatically refunded</b> to your balance.", # <--- ОСЬ ТУТ ДОДАНО КОМУ
+        "magic_wait": "🧘 Wait... Magic doesn't tolerate haste."
     },
     "ru": {
         "menu_daily": "✨ Карта дня (Бесплатно)",
@@ -137,7 +139,8 @@ LEXICON = {
         "loading_love_cards": "<i>Karma раскладывает карты на: Ваши чувства, Скрытые мысли, Будущее...</i>",
         "cards_on_table": "✨ <i>Карты легли на стол...</i>",
         "magic_interrupted": "🌪 <i>Магический эфир внезапно прервался... Карты не захотели говорить.</i>\n\nНе волнуйся. {refund_note} Попробуй спросить еще раз через несколько минут.",
-        "refund_note_balance": "Твои <b>{price} ⭐️ автоматически возвращены</b> на баланс."
+        "refund_note_balance": "Твои <b>{price} ⭐️ автоматически возвращены</b> на баланс.", # <--- ОСЬ ТУТ ДОДАНО КОМУ
+        "magic_wait": "🧘 Подожди... Магия не терпит спешки."
     }
 }
 

@@ -1,6 +1,7 @@
 import time
 from typing import Any, Awaitable, Callable, Dict
-
+from firebase_db import get_user_language
+from lexicon import get_text
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
