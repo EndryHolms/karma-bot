@@ -131,19 +131,29 @@ async def increment_balance(db: firestore.Client, user_id: int, delta: int) -> i
         return _run(transaction)
 
     return await asyncio.to_thread(_tx_sync)
+
+
 async def update_user_zodiac(db: firestore.Client, user_id: int, zodiac_key: str) -> None:
-    """Оновлює або встановлює знак зодіаку для користувача"""
-    doc_ref = db.collection("users").document(str(user_id))
-    doc_ref.set({"zodiac_sign": zodiac_key}, merge=True)
+    def _update_sync() -> None:
+        doc_ref = _users_col(db).document(str(user_id))
+        doc_ref.set({"zodiac_sign": zodiac_key}, merge=True)
+
+    await asyncio.to_thread(_update_sync)
+
 
 async def update_user_language(db: firestore.Client, user_id: int, lang: str) -> None:
-    """Зберігає обрану мову користувача"""
-    doc_ref = db.collection("users").document(str(user_id))
-    doc_ref.set({"language": lang}, merge=True)
+    def _update_sync() -> None:
+        doc_ref = _users_col(db).document(str(user_id))
+        doc_ref.set({"language": lang}, merge=True)
+
+    await asyncio.to_thread(_update_sync)
+
 
 async def get_user_language(db: firestore.Client, user_id: int) -> str:
-    """Отримує мову користувача (за замовчуванням 'uk')"""
-    doc = db.collection("users").document(str(user_id)).get()
-    if doc.exists:
-        return doc.to_dict().get("language", "uk")
-    return "uk"
+    def _get_sync() -> str:
+        doc = _users_col(db).document(str(user_id)).get()
+        if doc.exists:
+            return doc.to_dict().get("language", "uk")
+        return "uk"
+
+    return await asyncio.to_thread(_get_sync)

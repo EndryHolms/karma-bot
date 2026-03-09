@@ -1,151 +1,142 @@
 import asyncio
 import logging
-import re
 from datetime import datetime
+
+import pytz
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError
 from firebase_admin import firestore
-from keyboards import main_menu_kb
+
+from keyboards import horoscope_share_menu_kb, main_menu_kb
+
+_DAILY_REMINDER_TEXT = {
+    "uk": "✨ <i>Всесвіт має для тебе послання...</i>\n\nТвоя Карта Дня на сьогодні ще не відкрита. Дізнайся, які енергії тебе оточують просто зараз 👇",
+    "en": "✨ <i>The Universe has a message for you...</i>\n\nYour Card of the Day is still unopened. Find out what energies are surrounding you right now 👇",
+    "ru": "✨ <i>У Вселенной есть для тебя послание...</i>\n\nТвоя Карта Дня на сегодня еще не открыта. Узнай, какие энергии окружают тебя прямо сейчас 👇",
+}
+
+_HOROSCOPE_TITLE = {
+    "uk": "🔮 <b>Кармічний гороскоп на {date}:</b>",
+    "en": "🔮 <b>Karmic horoscope for {date}:</b>",
+    "ru": "🔮 <b>Кармический гороскоп на {date}:</b>",
+}
+
+_HOROSCOPE_FOLLOWUP = {
+    "uk": "💫 <i>Що підказує твоя інтуїція далі?</i> 👇",
+    "en": "💫 <i>What is your intuition telling you to do next?</i> 👇",
+    "ru": "💫 <i>Что подсказывает твоя интуиция дальше?</i> 👇",
+}
+
+
+def _localized(mapping: dict[str, str], lang: str) -> str:
+    return mapping.get(lang, mapping["uk"])
+
 
 async def send_daily_reminders(bot: Bot, db: firestore.Client):
-    logging.info("Починаю розсилку нагадувань...")
+    logging.info("РџРѕС‡РёРЅР°СЋ СЂРѕР·СЃРёР»РєСѓ РЅР°РіР°РґСѓРІР°РЅСЊ...")
     today_str = datetime.now().strftime("%Y-%m-%d")
-    
-    # Отримуємо всіх користувачів з бази
     users_ref = db.collection("users").stream()
-    
+
     count = 0
     for doc in users_ref:
-        user_data = doc.to_dict()
-        user_id = doc.id # ID користувача є назвою документа
+        user_data = doc.to_dict() or {}
+        user_id = doc.id
         last_date = user_data.get("last_daily_card_date")
-        
-        # Якщо людина сьогодні ще НЕ отримувала карту
+        lang = user_data.get("language", "uk")
+
         if last_date != today_str:
             try:
-                text = (
-                    "✨ <i>Всесвіт має для тебе послання...</i>\n\n"
-                    "Твоя Карта Дня на сьогодні ще не відкрита. "
-                    "Дізнайся, які енергії тебе оточують просто зараз 👇"
-                )
                 await bot.send_message(
-                    chat_id=user_id, 
-                    text=text, 
-                    reply_markup=main_menu_kb()
+                    chat_id=user_id,
+                    text=_localized(_DAILY_REMINDER_TEXT, lang),
+                    reply_markup=main_menu_kb(lang),
+                    parse_mode="HTML",
                 )
                 count += 1
-                
-                # ЗАХИСТ ВІД БАНУ: Telegram дозволяє не більше 30 повідомлень на секунду.
-                # Робимо маленьку паузу між кожним повідомленням.
                 await asyncio.sleep(0.1)
-                
             except TelegramForbiddenError:
-                # Цю помилку видає Telegram, якщо користувач заблокував бота.
-                # Ми просто ігноруємо її і йдемо далі.
                 pass
             except Exception as e:
-                logging.error(f"Помилка розсилки для {user_id}: {e}")
-                
-    logging.info(f"Нагадування успішно надіслано {count} користувачам.")
-    # Онови імпорти зверху
-from keyboards import main_menu_kb, horoscope_share_menu_kb 
-import asyncio
-import logging
-from aiogram import Bot
-from firebase_admin import firestore
+                logging.error(f"РџРѕРјРёР»РєР° СЂРѕР·СЃРёР»РєРё РґР»СЏ {user_id}: {e}")
 
-# ... (функція send_daily_reminders залишається без змін) ...
+    logging.info(f"РќР°РіР°РґСѓРІР°РЅРЅСЏ СѓСЃРїС–С€РЅРѕ РЅР°РґС–СЃР»Р°РЅРѕ {count} РєРѕСЂРёСЃС‚СѓРІР°С‡Р°Рј.")
 
-import logging
-import asyncio
-from datetime import datetime
-import pytz
-from aiogram import Bot
-from firebase_admin import firestore
-from keyboards import horoscope_share_menu_kb
 
 async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
-    logging.info("Починаю генерацію та розсилку гороскопів...")
-    
-    # 🕒 Отримуємо сьогоднішню дату (за Києвом) у форматі "09.03"
-    tz = pytz.timezone('Europe/Kyiv')
+    logging.info("РџРѕС‡РёРЅР°СЋ РіРµРЅРµСЂР°С†С–СЋ С‚Р° СЂРѕР·СЃРёР»РєСѓ РіРѕСЂРѕСЃРєРѕРїС–РІ...")
+
+    tz = pytz.timezone("Europe/Kyiv")
     today_date = datetime.now(tz).strftime("%d.%m")
-    
-    # 👇 Оновлений, максимально короткий промпт
+
     prompt = (
-        "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку (по одному короткому реченню). "
-        "Стиль: сарказм, втома від роботи, жарти про гроші, погоду та стосунки. "
-        "СУВОРА УМОВА: Жодного тексту до чи після знаків! Без вступів, без висновків, без зірочок Markdown. "
-        "Тільки 12 рядків. Обов'язково роби порожній рядок (Enter) між знаками. "
-        "Формат має бути точно таким:\n"
+        "РќР°РїРёС€Рё С–СЂРѕРЅС–С‡РЅРёР№, РєСѓРјРµРґРЅРёР№ С‚Р° РґСѓР¶Рµ Р¶РёС‚С‚С”РІРёР№ РіРѕСЂРѕСЃРєРѕРї РЅР° СЃСЊРѕРіРѕРґРЅС– РґР»СЏ РІСЃС–С… 12 Р·РЅР°РєС–РІ Р·РѕРґС–Р°РєСѓ (РїРѕ РѕРґРЅРѕРјСѓ РєРѕСЂРѕС‚РєРѕРјСѓ СЂРµС‡РµРЅРЅСЋ). "
+        "РЎС‚РёР»СЊ: СЃР°СЂРєР°Р·Рј, РІС‚РѕРјР° РІС–Рґ СЂРѕР±РѕС‚Рё, Р¶Р°СЂС‚Рё РїСЂРѕ РіСЂРѕС€С–, РїРѕРіРѕРґСѓ С‚Р° СЃС‚РѕСЃСѓРЅРєРё. "
+        "РЎРЈР’РћР Рђ РЈРњРћР’Рђ: Р–РѕРґРЅРѕРіРѕ С‚РµРєСЃС‚Сѓ РґРѕ С‡Рё РїС–СЃР»СЏ Р·РЅР°РєС–РІ! Р‘РµР· РІСЃС‚СѓРїС–РІ, Р±РµР· РІРёСЃРЅРѕРІРєС–РІ, Р±РµР· Р·С–СЂРѕС‡РѕРє Markdown. "
+        "РўС–Р»СЊРєРё 12 СЂСЏРґРєС–РІ. РћР±РѕРІ'СЏР·РєРѕРІРѕ СЂРѕР±Рё РїРѕСЂРѕР¶РЅС–Р№ СЂСЏРґРѕРє (Enter) РјС–Р¶ Р·РЅР°РєР°РјРё. "
+        "Р¤РѕСЂРјР°С‚ РјР°С” Р±СѓС‚Рё С‚РѕС‡РЅРѕ С‚Р°РєРёРј:\n"
         "♈ Овен - [твій жарт]\n\n"
         "♉ Телець - [твій жарт]\n\n"
         "...і так для всіх 12 знаків."
     )
-    
+
     try:
         response = await asyncio.to_thread(tarot_model.generate_content, prompt)
         raw_text = getattr(response, "text", "").strip()
     except Exception as e:
-        logging.error(f"Помилка генерації гороскопу: {e}")
+        logging.error(f"РџРѕРјРёР»РєР° РіРµРЅРµСЂР°С†С–С— РіРѕСЂРѕСЃРєРѕРїСѓ: {e}")
         return
 
     if not raw_text:
         return
 
-    # === ЛОГІКА РОЗДІЛЕННЯ ТЕКСТУ ===
     signs_mapping = {
-        "aries": "Овен", "taurus": "Телець", "gemini": "Близнюки",
-        "cancer": "Рак", "leo": "Лев", "virgo": "Діва",
-        "libra": "Терези", "scorpio": "Скорпіон", "sagittarius": "Стрілець",
-        "capricorn": "Козер", "aquarius": "Водолій", "pisces": "Риби"
+        "aries": "Овен",
+        "taurus": "Телець",
+        "gemini": "Близнюки",
+        "cancer": "Рак",
+        "leo": "Лев",
+        "virgo": "Діва",
+        "libra": "Терези",
+        "scorpio": "Скорпіон",
+        "sagittarius": "Стрілець",
+        "capricorn": "Козер",
+        "aquarius": "Водолій",
+        "pisces": "Риби",
     }
-    
-    user_horoscopes = {"all": raw_text} # Якщо юзер обрав "Всі знаки"
-    
-    lines = raw_text.split('\n')
+
+    user_horoscopes = {"all": raw_text}
+    lines = raw_text.split("\n")
     for key, name in signs_mapping.items():
         sign_line = ""
         for line in lines:
             if name in line and ("-" in line or "—" in line):
                 sign_line = line.strip()
                 break
-        
-        # Якщо юзер обрав конкретний знак, він отримає ТІЛЬКИ цей рядок
         user_horoscopes[key] = sign_line if sign_line else raw_text
 
-    # === РОЗСИЛКА КОРИСТУВАЧАМ ===
     users_ref = db.collection("users").stream()
     count = 0
-    
+
     for doc in users_ref:
         user_data = doc.to_dict() or {}
         user_id = doc.id
-        
+        lang = user_data.get("language", "uk")
         zodiac_pref = user_data.get("zodiac_sign", "all")
         text_to_send = user_horoscopes.get(zodiac_pref, user_horoscopes["all"])
-        
-        # 👇 Додаємо наш новий лаконічний заголовок з датою
-        final_message = f"🔮 <b>Кармічний гороскоп на {today_date}:</b>\n\n{text_to_send}"
-        
+        title = _localized(_HOROSCOPE_TITLE, lang).format(date=today_date)
+        final_message = f"{title}\n\n{text_to_send}"
+
         try:
-            # 1. Відправляємо текст
+            await bot.send_message(chat_id=user_id, text=final_message, parse_mode="HTML")
             await bot.send_message(
-                chat_id=user_id, 
-                text=final_message, 
-                parse_mode="HTML"
-            )
-            
-            # 2. Відправляємо меню
-            await bot.send_message(
-                chat_id=user_id, 
-                text="💫 <i>Що підказує твоя інтуїція далі?</i> 👇", 
-                reply_markup=horoscope_share_menu_kb(),
-                parse_mode="HTML"
+                chat_id=user_id,
+                text=_localized(_HOROSCOPE_FOLLOWUP, lang),
+                reply_markup=horoscope_share_menu_kb(lang),
+                parse_mode="HTML",
             )
             count += 1
             await asyncio.sleep(0.1)
         except Exception:
             pass
 
-    logging.info(f"Гороскоп успішно надіслано {count} користувачам.")
+    logging.info(f"Р“РѕСЂРѕСЃРєРѕРї СѓСЃРїС–С€РЅРѕ РЅР°РґС–СЃР»Р°РЅРѕ {count} РєРѕСЂРёСЃС‚СѓРІР°С‡Р°Рј.")

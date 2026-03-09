@@ -10,25 +10,24 @@ import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from firebase_admin import firestore
 
-from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance, get_user_language
-from lexicon import get_text
+from firebase_db import InsufficientBalanceError, ensure_user, get_balance, get_user_language, increment_balance
 from handlers.payment import send_stars_invoice
 from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, main_menu_kb
+from lexicon import get_text
 
 router = Router()
 
 RELATIONSHIP_PRICE = 1
 CAREER_PRICE = 1
 
-_admin_env = os.getenv("ADMIN_IDS", "469764985") 
+_admin_env = os.getenv("ADMIN_IDS", "469764985")
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
-# 👇 Налаштування безпеки для Gemini
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -39,28 +38,29 @@ SAFETY_SETTINGS = {
 IMAGES_DAILY = {
     "uk": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png",
     "en": "https://i.postimg.cc/jS1x5Z4t/b_A_richly_detailed_Ta_1_en.png",
-    "ru": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png"
+    "ru": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png",
 }
 
 IMAGES_LOVE = {
     "uk": "https://i.postimg.cc/xTZP1Png/b_A_richly_detailed_Ta_2.png",
     "en": "https://i.postimg.cc/wMFHdVjn/b_A_richly_detailed_Ta_2_en.png",
-    "ru": "https://i.postimg.cc/nrTZtkh6/b_A_richly_detailed_Ta_2_ru.png"
+    "ru": "https://i.postimg.cc/nrTZtkh6/b_A_richly_detailed_Ta_2_ru.png",
 }
 
 IMAGES_CAREER = {
     "uk": "https://i.postimg.cc/pdfQkb8Z/b_A_richly_detailed_Ta_3.png",
     "en": "https://i.postimg.cc/nzGfvkBT/b_A_richly_detailed_Ta_3_en.png",
-    "ru": "https://i.postimg.cc/rmN2SJxQ/b_A_richly_detailed_Ta_3_ru.png"
+    "ru": "https://i.postimg.cc/rmN2SJxQ/b_A_richly_detailed_Ta_3_ru.png",
 }
+
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
 
+
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
     def _call_sync() -> str:
         try:
-            # Додаємо safety_settings, щоб уникнути блокування езотерики
             resp = model.generate_content(prompt, safety_settings=SAFETY_SETTINGS)
             if not resp or not hasattr(resp, "candidates") or not resp.candidates:
                 return ""
@@ -68,7 +68,9 @@ async def _gemini_generate_text(model: Any, prompt: str) -> str:
         except Exception as e:
             print(f"GenAI Text Error: {e}")
             return ""
+
     return await asyncio.to_thread(_call_sync)
+
 
 async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: bytes) -> str:
     def _call_sync() -> str:
@@ -84,34 +86,100 @@ async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: byte
             print(f"GenAI Audio Error: {e}")
             return ""
         finally:
-            try: os.remove(path)
-            except OSError: pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
     return await asyncio.to_thread(_call_sync)
+
 
 async def _send_long(message: Message, text: str, reply_markup: Any = None, lang: str = "uk") -> None:
     limit = 4000
     chunks = [text[i : i + limit] for i in range(0, len(text), limit)]
     for chunk in chunks:
         await message.answer(chunk)
-        
+
     if reply_markup:
         await message.answer(
-            get_text(lang, "more_action_btn"), 
+            get_text(lang, "more_action_btn"),
             reply_markup=reply_markup,
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
+
+
+async def _start_paid_reading(
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: firestore.Client,
+    *,
+    reading_key: str,
+    price: int,
+    prompt_key: str,
+) -> None:
+    if not callback.from_user:
+        return
+
+    await ensure_user(
+        db,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username or "",
+        first_name=callback.from_user.first_name or "",
+    )
+    await callback.answer()
+
+    lang = await get_user_language(db, callback.from_user.id)
+    is_admin = callback.from_user.id in ADMIN_IDS
+
+    if not is_admin:
+        balance = await get_balance(db, callback.from_user.id)
+        if balance < price:
+            title_key = "invoice_love_title" if reading_key == "relationship" else "invoice_career_title"
+            desc_key = "invoice_love_desc" if reading_key == "relationship" else "invoice_career_desc"
+            await send_stars_invoice(
+                callback=callback,
+                title=get_text(lang, title_key),
+                description=get_text(lang, desc_key),
+                amount_stars=price,
+                payload=f"topup:{price}",
+            )
+            return
+
+        try:
+            await increment_balance(db, callback.from_user.id, -price)
+        except InsufficientBalanceError:
+            if callback.message:
+                await callback.message.answer(get_text(lang, "error_payment"))
+            return
+
+    await state.set_state(ReadingStates.waiting_for_context)
+    await state.update_data(reading_key=reading_key, price=price)
+
+    if callback.message:
+        await callback.message.answer(
+            get_text(lang, prompt_key),
+            reply_markup=back_to_menu_kb(lang),
+            parse_mode="HTML",
+        )
+
 
 @router.callback_query(F.data == CB_DAILY)
 async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model: Any) -> None:
-    if not callback.from_user: return
+    if not callback.from_user:
+        return
     user_id = str(callback.from_user.id)
-    await ensure_user(db, user_id=callback.from_user.id, username=callback.from_user.username or "", first_name=callback.from_user.first_name or "")
-    
+    await ensure_user(
+        db,
+        user_id=callback.from_user.id,
+        username=callback.from_user.username or "",
+        first_name=callback.from_user.first_name or "",
+    )
+
     lang = await get_user_language(db, callback.from_user.id)
+    today_str = datetime.now().strftime("%Y-%m-%d")
 
     is_admin = callback.from_user.id in ADMIN_IDS
     if not is_admin:
-        today_str = datetime.now().strftime("%Y-%m-%d")
         doc = db.collection("users").document(user_id).get()
         user_data = doc.to_dict() or {}
         if user_data.get("last_daily_card_date") == today_str:
@@ -119,27 +187,26 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
             return
 
     await callback.answer()
-    
+
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
-    prompt = f"Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
-    
-    # 👇 Запускаємо Gemini паралельно з анімацією
+    prompt = f"Р’итягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
+
     ai_task = asyncio.create_task(_gemini_generate_text(tarot_model, prompt))
-    
+
     msg = await callback.message.answer(get_text(lang, "loading_daily_1"), parse_mode="HTML")
     await asyncio.sleep(1.5)
     await msg.edit_text(get_text(lang, "loading_daily_2"), parse_mode="HTML")
     await asyncio.sleep(1.5)
     await msg.edit_text(get_text(lang, "loading_daily_3"), parse_mode="HTML")
-    
+
     try:
         text = await ai_task
         if text:
             db.collection("users").document(user_id).update({"last_daily_card_date": today_str})
-        
+
         await msg.delete()
-        
+
         if text:
             current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
             await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
@@ -148,28 +215,54 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
             await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
     except Exception as e:
         print(f"Daily Handler Error: {e}")
-        try: await msg.delete() 
-        except: pass
+        try:
+            await msg.delete()
+        except Exception:
+            pass
         await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
 
-# ... (решта хендлерів для Relationship та Career залишаються без змін, оскільки логіка _start_paid_reading вірна)
+
+@router.callback_query(F.data == CB_RELATIONSHIP)
+async def relationship_reading(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
+    await _start_paid_reading(
+        callback,
+        state,
+        db,
+        reading_key="relationship",
+        price=RELATIONSHIP_PRICE,
+        prompt_key="ask_love_context",
+    )
+
+
+@router.callback_query(F.data == CB_CAREER)
+async def career_reading(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
+    await _start_paid_reading(
+        callback,
+        state,
+        db,
+        reading_key="career",
+        price=CAREER_PRICE,
+        prompt_key="ask_career_context",
+    )
+
 
 @router.message(ReadingStates.waiting_for_context)
 async def reading_context_message(message: Message, state: FSMContext, db: firestore.Client, bot: Any, tarot_model: Any) -> None:
-    if not message.from_user: return
+    if not message.from_user:
+        return
     lang = await get_user_language(db, message.from_user.id)
-    
+
     data = await state.get_data()
     reading_key = data.get("reading_key")
     price = data.get("price", 1)
-    
+
     topic = "стосунки" if reading_key == "relationship" else "кар'єра"
     wait_text = get_text(lang, "loading_love_cards") if reading_key == "relationship" else get_text(lang, "loading_cards")
     msg = await message.answer(wait_text, reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
-    
+
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
-    
+
     text = ""
     try:
         if message.voice:
@@ -185,17 +278,22 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         print(f"Reading Context Error: {e}")
 
     await msg.delete()
-    
+
     if not text:
-        # Повернення коштів, якщо ШІ не відповів
         if message.from_user.id not in ADMIN_IDS:
             try:
                 await increment_balance(db, message.from_user.id, price)
                 refund_note = get_text(lang, "refund_note_balance").format(price=price)
-            except: refund_note = ""
-        else: refund_note = ""
-        
-        await message.answer(get_text(lang, "magic_interrupted").format(refund_note=refund_note), reply_markup=main_menu_kb(lang), parse_mode="HTML")
+            except Exception:
+                refund_note = ""
+        else:
+            refund_note = ""
+
+        await message.answer(
+            get_text(lang, "magic_interrupted").format(refund_note=refund_note),
+            reply_markup=main_menu_kb(lang),
+            parse_mode="HTML",
+        )
         await state.clear()
         return
 
