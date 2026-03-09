@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import asyncio
 import os
 from typing import Any
@@ -10,7 +9,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from firebase_admin import firestore
 
-from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance
+# 👇 Наші нові імпорти
+from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance, get_user_language
+from lexicon import get_text
 from handlers.payment import send_stars_invoice
 from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 
@@ -19,7 +20,6 @@ router = Router()
 ADVICE_PRICE = 1
 IMG_ADVICE = "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png" # Космос/зірки
 
-# Адміни з змінних оточення
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
@@ -47,16 +47,17 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
     )
     await callback.answer()
 
+    # Отримуємо мову користувача
+    lang = await get_user_language(db, callback.from_user.id)
     is_admin = callback.from_user.id in ADMIN_IDS
 
     if not is_admin:
         balance = await get_balance(db, callback.from_user.id)
         if balance < ADVICE_PRICE:
-            # 👇 ТУТ ЗМІНЕНО: Правильна назва
             await send_stars_invoice(
                 callback=callback,
-                title="Порада Всесвіту 🧘",
-                description="Коротка мудрість або відповідь на чітке запитання.",
+                title=get_text(lang, "invoice_advice_title"),
+                description=get_text(lang, "invoice_advice_desc"),
                 amount_stars=ADVICE_PRICE,
                 payload=f"topup:{ADVICE_PRICE}"
             )
@@ -66,55 +67,61 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
             await increment_balance(db, callback.from_user.id, -ADVICE_PRICE)
         except InsufficientBalanceError:
             if callback.message:
-                await callback.message.answer("Недостатньо ⭐ для оплати.")
+                await callback.message.answer(get_text(lang, "error_payment"))
             return
 
     await state.set_state(AdviceStates.waiting_for_question)
-    # Зберігаємо ціну для повернення
     await state.update_data(price=ADVICE_PRICE)
     
     if callback.message:
         await callback.message.answer(
-            "Напишіть своє запитання Всесвіту (або відправте '...', щоб отримати загальну пораду):",
-            reply_markup=back_to_menu_kb()
+            get_text(lang, "ask_question"),
+            reply_markup=back_to_menu_kb(lang)
         )
 
 @router.message(AdviceStates.waiting_for_question)
 async def advice_process(message: Message, state: FSMContext, advice_model: Any, db: firestore.Client) -> None:
     if not message.from_user: return
-    user_text = message.text or "Загальна порада"
     
-    # Дістаємо ціну для повернення
+    # Отримуємо мову
+    lang = await get_user_language(db, message.from_user.id)
+    
+    user_text = message.text or get_text(lang, "default_advice_request")
+    
     data = await state.get_data()
     price = data.get("price", 1)
 
-    msg = await message.answer("🧘 <i>З'єднуюсь з потоком...</i>", reply_markup=ReplyKeyboardRemove())
+    # Перекладений текст завантаження
+    msg = await message.answer(get_text(lang, "loading_advice"), reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
     
-    prompt = f"Користувач запитує: '{user_text}'. Дай глибоку, філософську, але практичну пораду. Використовуй емодзі."
+    # ВКАЗІВКА ДЛЯ GEMINI ЯКОЮ МОВОЮ ВІДПОВІДАТИ
+    ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
+    target_language = ai_languages.get(lang, "Ukrainian")
+    
+    prompt = f"Користувач запитує: '{user_text}'. Дай глибоку, філософську, але практичну пораду. Використовуй емодзі.\n\nIMPORTANT: You MUST write your ENTIRE response in {target_language} language!"
     text = await _gemini_text(advice_model, prompt)
     
     await msg.delete()
 
-    # 👇 ЛОГІКА ПОВЕРНЕННЯ КОШТІВ
     if not text:
         is_admin = message.from_user.id in ADMIN_IDS
         refund_note = ""
         if not is_admin:
             try:
                 await increment_balance(db, message.from_user.id, price)
-                refund_note = f"Твої <b>{price} ⭐️ автоматично повернуто</b>."
+                refund_note = get_text(lang, "refund_note").format(price=price)
             except: pass
         
-        await message.answer(f"Вибач, Всесвіт зараз мовчить. {refund_note}", reply_markup=main_menu_kb())
+        # Перекладене повідомлення про помилку + повернення коштів
+        silent_msg = get_text(lang, "universe_silent")
+        await message.answer(f"{silent_msg} {refund_note}".strip(), reply_markup=main_menu_kb(lang), parse_mode="HTML")
         await state.clear()
         return
 
-   # Відправка картинки та тексту
-    await message.answer_photo(photo=IMG_ADVICE, caption="✨ <i>Відповідь Всесвіту:</i>")
+    # Відправка картинки та тексту
+    await message.answer_photo(photo=IMG_ADVICE, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
+    await message.answer(text, parse_mode="HTML")
     
-    # Відправляємо текст поради окремо
-    await message.answer(text)
-    
-    # Відправляємо меню окремим повідомленням
-    await message.answer("💫 <i>Відчуваєш, що це не все? Обери наступну дію 👇</i>", reply_markup=main_menu_kb())
+    # Відправляємо меню
+    await message.answer(get_text(lang, "more_action_btn"), reply_markup=main_menu_kb(lang), parse_mode="HTML")
     await state.clear()
