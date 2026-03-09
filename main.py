@@ -51,6 +51,23 @@ async def _run_web_server(port: int) -> None:
     finally:
         await runner.cleanup()
 
+class SafeGeminiModel:
+    """Розумна обгортка, яка автоматично перемикає моделі при помилці"""
+    def __init__(self, primary_name: str, fallback_name: str, system_instruction: str = None):
+        # Ініціалізуємо одразу дві моделі з однаковими налаштуваннями
+        kwargs = {"system_instruction": system_instruction} if system_instruction else {}
+        self.primary = genai.GenerativeModel(primary_name, **kwargs)
+        self.fallback = genai.GenerativeModel(fallback_name, **kwargs)
+
+    def generate_content(self, contents, **kwargs):
+        try:
+            # Спроба №1: Основна модель (flash)
+            return self.primary.generate_content(contents, **kwargs)
+        except Exception as e:
+            import logging
+            logging.warning(f"⚠️ Основна модель впала ({e}). Перемикаюсь на запасну: {self.fallback.model_name}")
+            # Спроба №2: Запасна модель (pro)
+            return self.fallback.generate_content(contents, **kwargs)
 
 async def main() -> None:
     logging.basicConfig(
@@ -69,14 +86,17 @@ async def main() -> None:
     # 👇 ВАЖЛИВА ЗМІНА:
     # Використовуємо "gemini-1.5-flash" замість "2.5-lite".
     # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.
-    tarot_model = genai.GenerativeModel(
-        model_name="gemini-flash-latest",
-        system_instruction=KARMA_SYSTEM_PROMPT,
+    # Використовуємо нашу розумну обгортку замість звичайного GenerativeModel
+    tarot_model = SafeGeminiModel(
+        primary_name="gemini-flash-latest",
+        fallback_name="gemini-3.1-pro-preview",
+        system_instruction=KARMA_SYSTEM_PROMPT
     )
-    
-    advice_model = genai.GenerativeModel(
-        model_name="gemini-flash-latest", 
-        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
+
+    advice_model = SafeGeminiModel(
+        primary_name="gemini-flash-latest",
+        fallback_name="gemini-3.1-pro-preview",
+        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT
     )
 
     bot = Bot(
