@@ -127,6 +127,7 @@ async def process_zodiac_selection(callback: CallbackQuery, db: firestore.Client
     
     zodiac_name = ZODIACS.get(zodiac_key, "🌌 Усі знаки")
     
-    await callback.answer(f"✅ Твій знак змінено на: {zodiac_name}", show_alert=True)
-    # Повертаємо в профіль
-    await profile(callback, db)
+   await callback.message.answer(
+        get_text(lang, "welcome_text"),
+        reply_markup=main_menu_kb(lang)
+    )
