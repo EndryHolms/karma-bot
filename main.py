@@ -88,12 +88,12 @@ async def main() -> None:
     # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.
     # Ініціалізуємо стандартні моделі без підстраховки
     tarot_model = genai.GenerativeModel(
-        "gemini-1.5-flash",
+        "gemini-2.0-flash-lite",
         system_instruction=KARMA_SYSTEM_PROMPT
     )
 
     advice_model = genai.GenerativeModel(
-        "gemini-1.5-flash",
+        "gemini-2.0-flash-lite",
         system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT
     )
 
