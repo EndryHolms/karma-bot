@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError
@@ -58,7 +59,6 @@ from firebase_admin import firestore
 async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     logging.info("Починаю генерацію та розсилку гороскопів...")
     
-    # 👇 ОНОВЛЕНИЙ ПРОМПТ (HTML-теги, українські заголовки, чітка структура)
     prompt = (
         "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку. "
         "Стиль: сарказм, втома від роботи, жарти про гроші, погоду та колишніх. "
@@ -89,24 +89,72 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     if not raw_text:
         return
 
-    # Додаємо наш головний заголовок зверху
-    final_message = f"🔮 <b>Щоденний Кармічний Гороскоп</b>\n\n{raw_text}"
+    # === ЛОГІКА РОЗДІЛЕННЯ ТЕКСТУ ПО ЗНАКАХ ===
     
-    # Робимо розсилку
+    # 1. Знаходимо вступ (до першого знака зодіаку)
+    intro_match = re.split(r'♈|♉|♊|♋|♌|♍|♎|♏|♐|♑|♒|♓', raw_text, maxsplit=1)
+    intro = intro_match[0].strip() if len(intro_match) > 1 else ""
+
+    # 2. Знаходимо кінцівку (Порада та Афірмація)
+    outro_match = re.split(r'✨\s*<b>Порада', raw_text, maxsplit=1)
+    outro = "✨ <b>Порада" + outro_match[1].strip() if len(outro_match) > 1 else ""
+
+    # 3. Витягуємо рядок для кожного конкретного знаку
+    signs_mapping = {
+        "aries": "Овен", "taurus": "Телець", "gemini": "Близнюки",
+        "cancer": "Рак", "leo": "Лев", "virgo": "Діва",
+        "libra": "Терези", "scorpio": "Скорпіон", "sagittarius": "Стрілець",
+        "capricorn": "Козер", "aquarius": "Водолій", "pisces": "Риби"
+    }
+    
+    user_horoscopes = {"all": raw_text} # Для тих, хто не обрав знак
+    
+    lines = raw_text.split('\n')
+    for key, name in signs_mapping.items():
+        sign_line = ""
+        for line in lines:
+            if name in line and ("-" in line or "—" in line):
+                sign_line = line.strip()
+                break
+        
+        # Склеюємо персональний гороскоп: Вступ + Конкретний знак + Кінцівка
+        if sign_line and outro:
+            user_horoscopes[key] = f"{intro}\n\n{sign_line}\n\n{outro}"
+        else:
+            user_horoscopes[key] = raw_text # Запасний варіант
+
+    # === РОЗСИЛКА КОРИСТУВАЧАМ ===
     users_ref = db.collection("users").stream()
     count = 0
     
     for doc in users_ref:
+        user_data = doc.to_dict() or {}
         user_id = doc.id
+        
+        # Беремо знак юзера (або "all" за замовчуванням)
+        zodiac_pref = user_data.get("zodiac_sign", "all")
+        text_to_send = user_horoscopes.get(zodiac_pref, user_horoscopes["all"])
+        
+        final_message = f"🔮 <b>Щоденний Кармічний Гороскоп</b>\n\n{text_to_send}"
+        
         try:
+            # 1. Відправляємо ТЕКСТ гороскопу (БЕЗ МЕНЮ, щоб він не зникав)
             await bot.send_message(
                 chat_id=user_id, 
                 text=final_message, 
-                reply_markup=horoscope_share_menu_kb()
+                parse_mode="HTML"
+            )
+            
+            # 2. Відправляємо МЕНЮ окремим маленьким повідомленням під гороскопом
+            await bot.send_message(
+                chat_id=user_id, 
+                text="💫 <i>Що підказує твоя інтуїція далі?</i> 👇", 
+                reply_markup=horoscope_share_menu_kb(),
+                parse_mode="HTML"
             )
             count += 1
-            await asyncio.sleep(0.1) # Захист від блокування Телеграмом
+            await asyncio.sleep(0.1) # Захист від блокування
         except Exception:
-            pass # Юзер заблокував бота або видалив чат
+            pass
 
     logging.info(f"Гороскоп успішно надіслано {count} користувачам.")
