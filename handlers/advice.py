@@ -9,17 +9,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from firebase_admin import firestore
 
-from firebase_db import (
-    InsufficientBalanceError,
-    ensure_user,
-    get_balance,
-    get_user_language,
-    increment_balance,
-)
-from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
+from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance, get_user_language
 from lexicon import get_text
-
 from handlers.payment import send_stars_invoice
+from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 
 router = Router()
 
@@ -28,44 +21,34 @@ ADVICE_PRICE = 1
 # Мультимовні картинки для Поради Всесвіту
 IMAGES_ADVICE = {
     "uk": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png",
-    "en": "https://i.postimg.cc/vBtwWzf0/b_A_richly_detailed_Ta_4_en.png",
-    "ru": "https://i.postimg.cc/MTmJyDVs/b_A_richly_detailed_Ta_4_ru.png",
+    "en": "https://i.postimg.cc/vBtwWzf0/b_A_richly_detailed_Ta_4_en.png", # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/MTmJyDVs/b_A_richly_detailed_Ta_4_ru.png"  # 👈 Встав посилання
 }
 
-_admin_env = os.getenv("ADMIN_IDS", "469764985")
+_admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
-
 
 class AdviceStates(StatesGroup):
     waiting_for_question = State()
 
-
-async def _gemini_text(model: Any, prompt: str, system_instruction: str) -> str:
-    """Обгортка для генерації тексту з динамічною системною інструкцією."""
-
+async def _gemini_text(model: Any, prompt: str) -> str:
     def _sync():
         try:
-            # Передаємо інструкцію напряму в модель
-            resp = model.generate_content(prompt, system_instruction=system_instruction)
+            resp = model.generate_content(prompt)
             return (getattr(resp, "text", "") or "").strip()
         except Exception as e:
             print(f"Advice Gen Error: {e}")
             return ""
-
     return await asyncio.to_thread(_sync)
 
-
 @router.callback_query(F.data == CB_ADVICE)
-async def ask_advice_start(
-    callback: CallbackQuery, state: FSMContext, db: firestore.Client
-) -> None:
-    if not callback.from_user:
-        return
+async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
+    if not callback.from_user: return
     await ensure_user(
-        db,
-        user_id=callback.from_user.id,
-        username=callback.from_user.username or "",
-        first_name=callback.from_user.first_name or "",
+        db, 
+        user_id=callback.from_user.id, 
+        username=callback.from_user.username or "", 
+        first_name=callback.from_user.first_name or ""
     )
     await callback.answer()
 
@@ -80,10 +63,10 @@ async def ask_advice_start(
                 title=get_text(lang, "invoice_advice_title"),
                 description=get_text(lang, "invoice_advice_desc"),
                 amount_stars=ADVICE_PRICE,
-                payload=f"topup:{ADVICE_PRICE}",
+                payload=f"topup:{ADVICE_PRICE}"
             )
             return
-
+        
         try:
             await increment_balance(db, callback.from_user.id, -ADVICE_PRICE)
         except InsufficientBalanceError:
@@ -93,38 +76,35 @@ async def ask_advice_start(
 
     await state.set_state(AdviceStates.waiting_for_question)
     await state.update_data(price=ADVICE_PRICE)
-
+    
     if callback.message:
         await callback.message.answer(
-            get_text(lang, "ask_question"), reply_markup=back_to_menu_kb(lang)
+            get_text(lang, "ask_question"),
+            reply_markup=back_to_menu_kb(lang)
         )
 
-
 @router.message(AdviceStates.waiting_for_question)
-async def advice_process(
-    message: Message, state: FSMContext, advice_model: Any, db: firestore.Client
-) -> None:
-    if not message.from_user:
-        return
-
+async def advice_process(message: Message, state: FSMContext, advice_model: Any, db: firestore.Client) -> None:
+    if not message.from_user: return
+    
     lang = await get_user_language(db, message.from_user.id)
     user_text = message.text or get_text(lang, "default_advice_request")
-
+    
     data = await state.get_data()
     price = data.get("price", 1)
 
-    msg = await message.answer(
-        get_text(lang, "loading_advice"),
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode="HTML",
-    )
-
-    # Динамічно отримуємо системну інструкцію для потрібної мови
-    system_instruction = get_text(lang, "universe_advice_system_prompt")
-
-    # Генеруємо відповідь
-    text = await _gemini_text(advice_model, user_text, system_instruction)
-
+    # 👇 ОСЬ ЦЯ АНІМАЦІЯ ОЧІКУВАННЯ, ЯКА ЗНИКЛА
+    msg = await message.answer(get_text(lang, "loading_advice"), reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
+    
+    ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
+    target_language = ai_languages.get(lang, "Ukrainian")
+    
+    # Формуємо промпт
+    prompt = f"Користувач запитує: '{user_text}'. Дай глибоку, філософську, але практичну пораду. Використовуй емодзі.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings or quotes) exclusively in {target_language} language!"
+    
+    # 👇 ОСЬ ЦЕЙ РЯДОК БУВ ВИДАЛЕНИЙ (ГЕНЕРАЦІЯ ТЕКСТУ)
+    text = await _gemini_text(advice_model, prompt)
+    
     # Видаляємо анімацію очікування
     await msg.delete()
 
@@ -135,33 +115,20 @@ async def advice_process(
             try:
                 await increment_balance(db, message.from_user.id, price)
                 refund_note = get_text(lang, "refund_note").format(price=price)
-            except:  # noqa: E722
-                pass
-
+            except: pass
+        
         silent_msg = get_text(lang, "universe_silent")
-        await message.answer(
-            f"{silent_msg} {refund_note}".strip(),
-            reply_markup=main_menu_kb(lang),
-            parse_mode="HTML",
-        )
+        await message.answer(f"{silent_msg} {refund_note}".strip(), reply_markup=main_menu_kb(lang), parse_mode="HTML")
         await state.clear()
         return
 
     # Відправка правильної картинки залежно від мови
     current_img = IMAGES_ADVICE.get(lang, IMAGES_ADVICE["uk"])
-    await message.answer_photo(
-        photo=current_img,
-        caption=get_text(lang, "universe_answer"),
-        parse_mode="HTML",
-    )
-
+    await message.answer_photo(photo=current_img, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
+    
     # Відправлення самого тексту поради
     await message.answer(text, parse_mode="HTML")
-
+    
     # Відправляємо меню
-    await message.answer(
-        get_text(lang, "more_action_btn"),
-        reply_markup=main_menu_kb(lang),
-        parse_mode="HTML",
-    )
+    await message.answer(get_text(lang, "more_action_btn"), reply_markup=main_menu_kb(lang), parse_mode="HTML")
     await state.clear()

@@ -8,9 +8,9 @@ Setup / Run notes (важливо) — Karma (@karma_tarot_bot)
   .venv\Scripts\activate
 
 2) Встанови залежності
-- Встанови пакети з файлу:
+- Встанови пакети:
 
-  pip install -r requirements.txt
+  pip install -U aiogram python-dotenv firebase-admin google-generativeai
 
 - (Опційно) перевір версію aiogram:
 
@@ -21,8 +21,6 @@ Setup / Run notes (важливо) — Karma (@karma_tarot_bot)
 - BOT_TOKEN — токен з @BotFather
 - GEMINI_API_KEY — ключ Gemini (Google AI Studio)
 - FIREBASE_CRED_PATH — шлях до JSON ключа Firebase
-- PRIMARY_MODEL_NAME — (опціонально) назва основної моделі, за замовчуванням 'gemini-1.5-flash-latest'
-- FALLBACK_MODEL_NAME — (опціонально) назва запасної моделі, за замовчуванням 'gemini-1.5-pro-latest'
 
 Приклад:
 BOT_TOKEN=123456:ABCDEF...

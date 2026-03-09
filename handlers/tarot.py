@@ -1,229 +1,258 @@
 from __future__ import annotations
+
 import asyncio
 import os
+import tempfile
+from datetime import datetime
 from typing import Any
 
-from aiogram import F, Router, types
+import google.generativeai as genai
+
+from aiogram import F, Router
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery
 from firebase_admin import firestore
 
-from firebase_db import (
-    InsufficientBalanceError,
-    ensure_user,
-    get_balance,
-    get_user_language,
-    increment_balance,
-)
-from keyboards import (
-    CB_CAREER,
-    CB_DAILY,
-    CB_RELATIONSHIP,
-    back_to_menu_kb,
-    main_menu_kb,
-)
+from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance, get_user_language
 from lexicon import get_text
-
 from handlers.payment import send_stars_invoice
+from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, main_menu_kb
 
 router = Router()
 
-_admin_env = os.getenv("ADMIN_IDS", "469764985")
+RELATIONSHIP_PRICE = 1
+CAREER_PRICE = 1
+
+_admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
-
-class TarotForm(StatesGroup):
-    question = State()
-
-
-PRICES = {CB_RELATIONSHIP: 3, CB_CAREER: 3}
-
-# Мультимовні картинки для розкладів
-IMAGES_TAROT = {
-    "uk": {
-        CB_DAILY: "https://i.postimg.cc/kG6N0s03/image.png",
-        CB_RELATIONSHIP: "https://i.postimg.cc/8PJHMgM9/b-A-richly-detailed-Ta-2.png",
-        CB_CAREER: "https://i.postimg.cc/j2yN5sxm/b-A-richly-detailed-Ta-3.png",
-    },
-    "en": {
-        CB_DAILY: "https://i.postimg.cc/FzXfSgpM/image.png",
-        CB_RELATIONSHIP: "https://i.postimg.cc/Pq0wWJRL/b-A-richly-detailed-Ta-2-en.png",
-        CB_CAREER: "https://i.postimg.cc/1zW1LzNn/b-A-richly-detailed-Ta-3-en.png",
-    },
-    "ru": {
-        CB_DAILY: "https://i.postimg.cc/kG6N0s03/image.png", # Залишимо українську
-        CB_RELATIONSHIP: "https://i.postimg.cc/y8p06v5v/b-A-richly-detailed-Ta-2-ru.png",
-        CB_CAREER: "https://i.postimg.cc/wMP51G1C/b-A-richly-detailed-Ta-3-ru.png",
-    },
+IMAGES_DAILY = {
+    "uk": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png",
+    "en": "https://i.postimg.cc/jS1x5Z4t/b-A-richly-detailed-Ta-1-en.png", # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png"  # 👈 Встав посилання
 }
 
-async def _gemini_text(model: Any, prompt: str, system_instruction: str) -> str:
-    """Обгортка для генерації тексту з динамічною системною інструкцією."""
+IMAGES_LOVE = {
+    "uk": "https://i.postimg.cc/xTZP1Png/b_A_richly_detailed_Ta_2.png",
+    "en": "https://i.postimg.cc/wMFHdVjn/b_A_richly_detailed_Ta_2_en.png",   # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/nrTZtkh6/b_A_richly_detailed_Ta_2_ru.png"    # 👈 Встав посилання
+}
 
-    def _sync():
+IMAGES_CAREER = {
+    "uk": "https://i.postimg.cc/pdfQkb8Z/b_A_richly_detailed_Ta_3.png",
+    "en": "https://i.postimg.cc/nzGfvkBT/b_A_richly_detailed_Ta_3_en.png", # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/rmN2SJxQ/b_A_richly_detailed_Ta_3_ru.png"  # 👈 Встав посилання
+}
+
+class ReadingStates(StatesGroup):
+    waiting_for_context = State()
+
+async def _gemini_generate_text(model: Any, prompt: str) -> str:
+    def _call_sync() -> str:
         try:
-            resp = model.generate_content(prompt, system_instruction=system_instruction)
+            resp = model.generate_content(prompt)
             return (getattr(resp, "text", "") or "").strip()
         except Exception as e:
-            print(f"Tarot Gen Error: {e}")
+            print(f"GenAI Text Error: {e}")
             return ""
+    return await asyncio.to_thread(_call_sync)
 
-    return await asyncio.to_thread(_sync)
+async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: bytes) -> str:
+    def _call_sync() -> str:
+        fd, path = tempfile.mkstemp(suffix=".ogg")
+        os.close(fd)
+        try:
+            with open(path, "wb") as f:
+                f.write(audio_bytes)
+            uploaded = genai.upload_file(path)
+            resp = model.generate_content([prompt, uploaded])
+            return (getattr(resp, "text", "") or "").strip()
+        except Exception as e:
+            print(f"GenAI Audio Error: {e}")
+            return ""
+        finally:
+            try: os.remove(path)
+            except OSError: pass
+    return await asyncio.to_thread(_call_sync)
 
+async def _send_long(message: Message, text: str, reply_markup: Any = None, lang: str = "uk") -> None:
+    limit = 4000
+    chunks = [text[i : i + limit] for i in range(0, len(text), limit)]
+    for chunk in chunks:
+        await message.answer(chunk)
+        
+    if reply_markup:
+        await message.answer(
+            get_text(lang, "more_action_btn"), 
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
 
-@router.callback_query(
-    F.data.in_([CB_RELATIONSHIP, CB_CAREER, CB_DAILY])
-)
-async def tarot_reading_start(
-    callback: CallbackQuery, state: FSMContext, db: firestore.Client
-) -> None:
-    if not callback.from_user:
-        return
-
-    await ensure_user(
-        db,
-        user_id=callback.from_user.id,
-        username=callback.from_user.username or "",
-        first_name=callback.from_user.first_name or "",
-    )
-    await callback.answer()
-
+@router.callback_query(F.data == CB_DAILY)
+async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model: Any) -> None:
+    if not callback.from_user: return
+    user_id = str(callback.from_user.id)
+    await ensure_user(db, user_id=callback.from_user.id, username=callback.from_user.username or "", first_name=callback.from_user.first_name or "")
+    
     lang = await get_user_language(db, callback.from_user.id)
 
-    price = PRICES.get(callback.data, 0)
     is_admin = callback.from_user.id in ADMIN_IDS
-
-    # Карта дня безкоштовна
-    if callback.data == CB_DAILY:
-        await state.update_data(reading_type=callback.data, price=0)
-        # Переходимо одразу до обробки, минаючи запитання
-        await tarot_reading_process(callback, state, db)
-        return
-
     if not is_admin:
-        balance = await get_balance(db, callback.from_user.id)
-        if balance < price:
-            invoice_titles = {
-                CB_RELATIONSHIP: get_text(lang, "invoice_love_title"),
-                CB_CAREER: get_text(lang, "invoice_career_title"),
-            }
-            invoice_descriptions = {
-                CB_RELATIONSHIP: get_text(lang, "invoice_love_desc"),
-                CB_CAREER: get_text(lang, "invoice_career_desc"),
-            }
-            await send_stars_invoice(
-                callback=callback,
-                title=invoice_titles.get(
-                    callback.data, get_text(lang, "invoice_default_title")
-                ),
-                description=invoice_descriptions.get(
-                    callback.data, get_text(lang, "invoice_default_desc")
-                ),
-                amount_stars=price,
-                payload=f"topup:{price}",
-            )
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        doc = db.collection("users").document(user_id).get()
+        user_data = doc.to_dict() or {}
+        if user_data.get("last_daily_card_date") == today_str:
+            await callback.answer(get_text(lang, "daily_already_opened"), show_alert=True)
             return
 
+    await callback.answer()
+    
+    ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
+    target_language = ai_languages.get(lang, "Ukrainian")
+    prompt = f"Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
+    
+    # 👇 1. МАГІЯ ПРИСКОРЕННЯ: Запускаємо Gemini у фоні ОДРАЗУ!
+    ai_task = asyncio.create_task(_gemini_generate_text(tarot_model, prompt))
+    
+    # 👇 2. ПОКИ GEMINI ДУМАЄ, показуємо театральні ефекти (час іде паралельно)
+    msg = await callback.message.answer(get_text(lang, "loading_daily_1"), parse_mode="HTML")
+    await asyncio.sleep(1.5)
+    await msg.edit_text(get_text(lang, "loading_daily_2"), parse_mode="HTML")
+    await asyncio.sleep(1.5)
+    await msg.edit_text(get_text(lang, "loading_daily_3"), parse_mode="HTML")
+    
+    # 👇 3. ОТРИМУЄМО РЕЗУЛЬТАТ (Gemini вже встиг його згенерувати або майже закінчив)
+    try:
+        text = await ai_task
+        if text:
+            db.collection("users").document(user_id).update({"last_daily_card_date": datetime.now().strftime("%Y-%m-%d")})
+        
+        await msg.delete()
+        
+        if callback.message:
+            if text:
+                current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
+                await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
+                await _send_long(callback.message, text, reply_markup=main_menu_kb(lang), lang=lang)
+            else:
+                await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
+    except Exception as e:
+        print(f"Daily Handler Error: {e}")
+        try: await msg.delete() 
+        except: pass
+        if callback.message:
+            await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
+
+
+@router.callback_query(F.data == CB_RELATIONSHIP)
+async def relationship_reading(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
+    lang = await get_user_language(db, callback.from_user.id if callback.from_user else 0)
+    await _start_paid_reading(
+        callback=callback, state=state, db=db, lang=lang,
+        price=RELATIONSHIP_PRICE, 
+        reading_key="relationship",
+        title=get_text(lang, "invoice_love_title"),
+        description=get_text(lang, "invoice_love_desc")
+    )
+
+
+@router.callback_query(F.data == CB_CAREER)
+async def career_reading(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
+    lang = await get_user_language(db, callback.from_user.id if callback.from_user else 0)
+    await _start_paid_reading(
+        callback=callback, state=state, db=db, lang=lang,
+        price=CAREER_PRICE, 
+        reading_key="career",
+        title=get_text(lang, "invoice_career_title"),
+        description=get_text(lang, "invoice_career_desc")
+    )
+
+
+async def _start_paid_reading(*, callback: CallbackQuery, state: FSMContext, db: firestore.Client, lang: str, price: int, reading_key: str, title: str, description: str) -> None:
+    if not callback.from_user: return
+    await ensure_user(db, user_id=callback.from_user.id, username=callback.from_user.username or "", first_name=callback.from_user.first_name or "")
+    await callback.answer()
+
+    is_admin = callback.from_user.id in ADMIN_IDS
+    if is_admin:
+        if callback.message: await callback.message.answer("👑 Admin Mode: Payment skipped.")
+    else:
+        balance = await get_balance(db, callback.from_user.id)
+        if balance < price:
+            await send_stars_invoice(
+                callback=callback, title=title, description=description,
+                amount_stars=price, payload=f"topup:{price}"
+            )
+            return
         try:
             await increment_balance(db, callback.from_user.id, -price)
         except InsufficientBalanceError:
-            if callback.message:
-                await callback.message.answer(get_text(lang, "error_payment"))
+            if callback.message: await callback.message.answer(get_text(lang, "error_payment"))
             return
 
-    await state.set_state(TarotForm.question)
-    await state.update_data(reading_type=callback.data, price=price)
-
+    await state.set_state(ReadingStates.waiting_for_context)
+    await state.update_data(reading_key=reading_key, price=price)
+    
     if callback.message:
-        await callback.message.answer(
-            get_text(lang, "ask_question_tarot"), reply_markup=back_to_menu_kb(lang)
-        )
+        if reading_key == "relationship":
+            await callback.message.answer(get_text(lang, "ask_love_context"), reply_markup=back_to_menu_kb(lang))
+        elif reading_key == "career":
+            await callback.message.answer(get_text(lang, "ask_career_context"), reply_markup=back_to_menu_kb(lang))
+        else:
+            await callback.message.answer(get_text(lang, "ask_general_context"), reply_markup=back_to_menu_kb(lang))
 
 
-async def tarot_reading_process(
-    event: types.Message | types.CallbackQuery, state: FSMContext, db: firestore.Client
-) -> None:
-    """Спільна логіка для обробки запиту (після введення питання або для Карти дня)."""
-    user_id = event.from_user.id
-    is_message = isinstance(event, types.Message)
-    target_message = event if is_message else event.message
-    if not target_message:
-        return
-
-    lang = await get_user_language(db, user_id)
+@router.message(ReadingStates.waiting_for_context)
+async def reading_context_message(message: Message, state: FSMContext, db: firestore.Client, bot: Any, tarot_model: Any) -> None:
+    if not message.from_user: return
+    lang = await get_user_language(db, message.from_user.id)
+    
     data = await state.get_data()
-    price = data.get("price", 0)
-    reading_type = data.get("reading_type", CB_DAILY)
+    reading_key = data.get("reading_key")
+    price = data.get("price", 1)
+    
+    topic = "стосунки" if reading_key == "relationship" else "кар'єра"
+    wait_text = get_text(lang, "loading_love_cards") if reading_key == "relationship" else get_text(lang, "loading_cards")
+    msg = await message.answer(wait_text, reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
+    
+    ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
+    target_language = ai_languages.get(lang, "Ukrainian")
+    
+    text = ""
+    try:
+        if message.voice:
+            file_info = await bot.get_file(message.voice.file_id)
+            audio_bytes = (await bot.download_file(file_info.file_path)).read()
+            prompt = f"Контекст про {topic} (голос). Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
+            text = await _gemini_generate_with_audio(tarot_model, prompt, audio_bytes)
+        else:
+            user_text = message.text or ""
+            prompt = f"Контекст про {topic}: {user_text}. Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
+            text = await _gemini_generate_text(tarot_model, prompt)
+    except Exception as e:
+        print(f"Reading Context Error: {e}")
 
-    # Для "Карти дня" питання не потрібне, використовуємо стандартне
-    if reading_type == CB_DAILY:
-        user_question = get_text(lang, "daily_card_question")
-    else:
-        user_question = event.text if is_message else ""
-        if not user_question:  # Якщо користувач не ввів питання
-            user_question = get_text(lang, "default_tarot_request")
-
-    # Анімація завантаження
-    loading_msg = await target_message.answer(
-        get_text(lang, "loading_tarot"), parse_mode="HTML"
-    )
-
-    # Динамічно отримуємо системну інструкцію
-    system_instruction = get_text(lang, "karma_system_prompt")
-
-    # Отримуємо модель з контексту, переданого через workflow_data
-    dp = Dispatcher.get_current()
-    tarot_model = dp.workflow_data.get("tarot_model")
-
-    # Генеруємо відповідь
-    text = await _gemini_text(tarot_model, user_question, system_instruction)
-
-    await loading_msg.delete()  # Видаляємо повідомлення "малюю"
-
+    await msg.delete()
+    
     if not text:
-        is_admin = user_id in ADMIN_IDS
+        is_admin = message.from_user.id in ADMIN_IDS
         refund_note = ""
-        if not is_admin and price > 0:
+        if not is_admin:
             try:
-                await increment_balance(db, user_id, price)
-                refund_note = get_text(lang, "refund_note").format(price=price)
-            except:  # noqa: E722
+                await increment_balance(db, message.from_user.id, price)
+                refund_note = get_text(lang, "refund_note_balance").format(price=price)
+            except Exception:
                 pass
-        silent_msg = get_text(lang, "tarot_silent")
-        await target_message.answer(
-            f"{silent_msg} {refund_note}".strip(),
-            reply_markup=main_menu_kb(lang),
-            parse_mode="HTML",
-        )
+        
+        error_msg = get_text(lang, "magic_interrupted").format(refund_note=refund_note)
+        await message.answer(error_msg, reply_markup=main_menu_kb(lang), parse_mode="HTML")
         await state.clear()
         return
 
-    # Обираємо правильну картинку
-    lang_images = IMAGES_TAROT.get(lang, IMAGES_TAROT["uk"])
-    image_url = lang_images.get(reading_type, "")
+    img_dict = IMAGES_LOVE if reading_key == "relationship" else IMAGES_CAREER
+    img_to_send = img_dict.get(lang, img_dict["uk"])
 
-    caption_keys = {
-        CB_DAILY: "daily_card_caption",
-        CB_RELATIONSHIP: "love_reading_caption",
-        CB_CAREER: "career_reading_caption",
-    }
-    caption = get_text(lang, caption_keys.get(reading_type, ""))
-
-    # Відправляємо результат
-    await target_message.answer_photo(photo=image_url, caption=caption, parse_mode="HTML")
-    await target_message.answer(text, parse_mode="HTML")
-    await target_message.answer(
-        get_text(lang, "more_action_btn"),
-        reply_markup=main_menu_kb(lang),
-        parse_mode="HTML",
-    )
-
+    await message.answer_photo(photo=img_to_send, caption=get_text(lang, "cards_on_table"), parse_mode="HTML")
+    await _send_long(message, text, reply_markup=main_menu_kb(lang), lang=lang)
     await state.clear()
-
-
-@router.message(TarotForm.question)
-async def message_tarot_process_wrapper(
-    message: types.Message, state: FSMContext, db: firestore.Client
-):
-    await tarot_reading_process(message, state, db)

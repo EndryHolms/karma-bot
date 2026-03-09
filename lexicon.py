@@ -10,7 +10,7 @@ LEXICON = {
         "btn_back": "🔙 Назад в меню",
         "choose_language": "🇺🇦 Оберіть мову:\n🇬🇧 Choose your language:\n🇷🇺 Выберите язык:",
         "lang_saved": "✅ Мову збережено!",
-        "welcome_text": "Вітаю, <b>{name}</b>. Я — Karma.\n\nЯ тут, щоб освітити твій шлях, коли стає темно. Пам\'ятай: карти не вирішують за тебе, вони лише показують вірогідності.\n\nЩо турбує твою душу сьогодні?",
+        "welcome_text": "Вітаю, <b>{name}</b>. Я — Karma.\n\nЯ тут, щоб освітити твій шлях, коли стає темно. Пам'ятай: карти не вирішують за тебе, вони лише показують вірогідності.\n\nЩо турбує твою душу сьогодні?",
         "main_menu_title": "Головне меню:",
         "btn_setup_horoscope": "🔮 Налаштувати гороскоп",
         "profile_text": "<b>🧘 Твій енергетичний баланс:</b>\n✨ Доступно зірок: <b>{balance} ⭐️</b>\n\n🔮 <b>Твій знак Зодіаку:</b> {zodiac}\n\n<b>Як поповнити запаси?</b>\nУ Всесвіті діє закон обміну. Просто обери будь-який платний розклад...\n\n<i>Енергія нікуди не зникає, вона лише змінює форму.</i>",
@@ -22,7 +22,7 @@ LEXICON = {
         "invoice_advice_title": "Порада Всесвіту 🧘",
         "invoice_advice_desc": "Коротка мудрість або відповідь на чітке запитання.",
         "error_payment": "Недостатньо ⭐ для оплати.",
-        "ask_question": "Напишіть своє запитання Всесвіту (або відправте \'...\', щоб отримати загальну пораду):",
+        "ask_question": "Напишіть своє запитання Всесвіту (або відправте '...', щоб отримати загальну пораду):",
         "default_advice_request": "Загальна порада",
         "refund_note": "Твої <b>{price} ⭐️ автоматично повернуто</b>.",
         "universe_silent": "Вибач, Всесвіт зараз мовчить.",
@@ -35,8 +35,8 @@ LEXICON = {
         "invoice_love_title": "Любов та Стосунки ❤️",
         "invoice_love_desc": "Аналіз почуттів, думок партнера та майбутнього.",
         "invoice_career_title": "Гроші та Реалізація 💰",
-        "invoice_career_desc": "Аналіз фінансів, кар\'єрного росту та проектів.",
-        "ask_love_context": "Зосередься на людині. Напиши її ім\'я та коротко опиши, що відбувається між вами зараз.",
+        "invoice_career_desc": "Аналіз фінансів, кар'єрного росту та проектів.",
+        "ask_love_context": "Зосередься на людині. Напиши її ім'я та коротко опиши, що відбувається між вами зараз.",
         "ask_career_context": "Опиши свою робочу ситуацію або проект, який тебе турбує.",
         "ask_general_context": "Опиши свою ситуацію (текстом або голосом)...",
         "loading_cards": "🔮 <i>Розкладаю карти...</i>",
@@ -55,59 +55,7 @@ LEXICON = {
             "libra": "♎ Терези⠀", "scorpio": "♏ Скорп.⠀", "sagittarius": "♐ Стріл.⠀",
             "capricorn": "♑ Козеріг", "aquarius": "♒ Водолій", "pisces": "♓ Риби⠀⠀⠀",
             "all": "🌌 Усі знаки"
-        },
-        "karma_system_prompt": """
-Role: You are Karma, a mystical tarot reader and guide. 
-Tone: Empathic, mysterious, deep, using 'You' (Ty). 
-Language: Ukrainian. Never say you are an AI. 
-
-Структура твоєї відповіді має бути точно такою (ОБОВ'ЯЗКОВО роби порожній рядок між заголовком та текстом під ним, а також між самими блоками):
-
-🎴 <b>Карти:</b>
-
-[Назви карт та їх короткий опис]
-
-👁 <b>Твій розклад:</b>
-
-[Детальне тлумачення]
-
-✨ <b>Порада від Karma:</b>
-
-[Текст поради]
-
-🌌 <b>Афірмація:</b>
-
-[Текст афірмації]
-
-ВАЖЛИВО ЩОДО ФОРМАТУВАННЯ:
-Ти відправляєш повідомлення в Telegram-бот, який підтримує ТІЛЬКИ HTML-розмітку. 
-СУВОРО ЗАБОРОНЕНО використовувати Markdown (ніяких зірочок ** для жирного шрифту).
-Для виділення тексту використовуй ВИКЛЮЧНО HTML-теги: <b>жирний текст</b>, <i>курсив</i>.
-""",
-        "universe_advice_system_prompt": """
-Role: Oracle. Do not use Tarot cards here. 
-Give metaphorical answers using nature symbols. 
-Language: Ukrainian.
-
-Структура твоєї відповіді має бути точно такою (ОБОВ'ЯЗКОВО роби порожній рядок між заголовком та текстом під ним, а також між самими блоками):
-
-🌌 <b>Символ:</b>
-
-[Опис символу]
-
-🗝 <b>Мудрість:</b>
-
-[Текст мудрості]
-
-⚡️ <b>Дія:</b>
-
-[Текст дії]
-
-ВАЖЛИВО ЩОДО ФОРМАТУВАННЯ:
-Ти відправляєш повідомлення в Telegram-бот, який підтримує ТІЛЬКИ HTML-розмітку. 
-СУВОРО ЗАБОРОНЕНО використовувати Markdown (ніяких зірочок ** для жирного шрифту).
-Для виділення тексту використовуй ВИКЛЮЧНО HTML-теги: <b>жирний текст</b>, <i>курсив</i>.
-"""
+        }
     },
     "en": {
         "menu_daily": "✨ Card of the Day (Free)",
@@ -116,6 +64,7 @@ Language: Ukrainian.
         "menu_advice": "🧘 Universe Advice (25 ⭐️)",
         "menu_profile": "👤 My Karma (Balance)",
         "btn_back": "🔙 Back to Menu",
+        "choose_language": "🇺🇦 Оберіть мову:\n🇬🇧 Choose your language:\n🇷🇺 Выберите язык:",
         "lang_saved": "✅ Language saved!",
         "welcome_text": "Welcome, <b>{name}</b>. I am Karma.\n\nI am here to illuminate your path when it gets dark. Remember: cards don't make decisions for you, they only show probabilities.\n\nWhat troubles your soul today?",
         "main_menu_title": "Main Menu:",
@@ -129,7 +78,7 @@ Language: Ukrainian.
         "invoice_advice_title": "Universe Advice 🧘",
         "invoice_advice_desc": "Short wisdom or an answer to a specific question.",
         "error_payment": "Not enough ⭐ to pay.",
-        "ask_question": "Write your question to the Universe (or send \'...\' to get a general advice):",
+        "ask_question": "Write your question to the Universe (or send '...' to get a general advice):",
         "default_advice_request": "General advice",
         "refund_note": "Your <b>{price} ⭐️ have been automatically refunded</b>.",
         "universe_silent": "Sorry, the Universe is silent right now.",
@@ -152,7 +101,7 @@ Language: Ukrainian.
         "magic_interrupted": "🌪 <i>The magical ether was suddenly interrupted... The cards refused to speak.</i>\n\nDon't worry. {refund_note} Try asking again in a few minutes.",
         "refund_note_balance": "Your <b>{price} ⭐️ have been automatically refunded</b> to your balance.",
         "magic_wait": "🧘 Wait... Magic doesn't tolerate haste.",
-        "zodiac_setup_title": "🔮 <b>Choose your Zodiac sign:</b>\n\nIf you select a specific sign, I will send the horoscope only for it. If you choose \'All signs\', you will receive the full list to share with friends!",
+        "zodiac_setup_title": "🔮 <b>Choose your Zodiac sign:</b>\n\nIf you select a specific sign, I will send the horoscope only for it. If you choose 'All signs', you will receive the full list to share with friends!",
         "btn_all_signs": "🌌 Send all signs",
         "btn_back_profile": "🔙 Back to Profile",
         "zodiac_saved": "✅ Sign saved!",
@@ -162,59 +111,7 @@ Language: Ukrainian.
             "libra": "♎ Libra⠀⠀", "scorpio": "♏ Scorpio", "sagittarius": "♐ Sagitt.⠀",
             "capricorn": "♑ Capric.", "aquarius": "♒ Aquarius", "pisces": "♓ Pisces⠀",
             "all": "🌌 All signs"
-        },
-        "karma_system_prompt": """
-Role: You are Karma, a mystical tarot reader and guide. 
-Tone: Empathic, mysterious, deep, using 'You'. 
-Language: English. Never say you are an AI. 
-
-Your response structure must be exactly like this (MANDATORY: leave a blank line between the header and the text below it, and also between the blocks themselves):
-
-🎴 <b>Cards:</b>
-
-[Card names and their brief description]
-
-👁 <b>Your Reading:</b>
-
-[Detailed interpretation]
-
-✨ <b>Advice from Karma:</b>
-
-[Advice text]
-
-🌌 <b>Affirmation:</b>
-
-[Affirmation text]
-
-IMPORTANT REGARDING FORMATTING:
-You are sending a message to a Telegram bot that ONLY supports HTML markup. 
-It is STRICTLY FORBIDDEN to use Markdown (no asterisks ** for bold text).
-Use ONLY HTML tags to highlight text: <b>bold text</b>, <i>italic text</i>.
-""",
-        "universe_advice_system_prompt": """
-Role: Oracle. Do not use Tarot cards here. 
-Give metaphorical answers using nature symbols. 
-Language: English.
-
-Your response structure must be exactly like this (MANDATORY: leave a blank line between the header and the text below it, and also between the blocks themselves):
-
-🌌 <b>Symbol:</b>
-
-[Symbol description]
-
-🗝 <b>Wisdom:</b>
-
-[Wisdom text]
-
-⚡️ <b>Action:</b>
-
-[Action text]
-
-IMPORTANT REGARDING FORMATTING:
-You are sending a message to a Telegram bot that ONLY supports HTML markup. 
-It is STRICTLY FORBIDDEN to use Markdown (no asterisks ** for bold text).
-Use ONLY HTML tags to highlight text: <b>bold text</b>, <i>italic text</i>.
-"""
+        }
     },
     "ru": {
         "menu_daily": "✨ Карта дня (Бесплатно)",
@@ -223,6 +120,7 @@ Use ONLY HTML tags to highlight text: <b>bold text</b>, <i>italic text</i>.
         "menu_advice": "🧘 Совет Вселенной (25 ⭐️)",
         "menu_profile": "👤 Моя карма (баланс)",
         "btn_back": "🔙 Назад в меню",
+        "choose_language": "🇺🇦 Оберіть мову:\n🇬🇧 Choose your language:\n🇷🇺 Выберите язык:",
         "lang_saved": "✅ Язык сохранен!",
         "welcome_text": "Приветствую, <b>{name}</b>. Я — Karma.\n\nЯ здесь, чтобы осветить твой путь, когда становится темно. Помни: карты не решают за тебя, они лишь показывают вероятности.\n\nЧто тревожит твою душу сегодня?",
         "main_menu_title": "Главное меню:",
@@ -236,7 +134,7 @@ Use ONLY HTML tags to highlight text: <b>bold text</b>, <i>italic text</i>.
         "invoice_advice_title": "Совет Вселенной 🧘",
         "invoice_advice_desc": "Короткая мудрость или ответ на четкий вопрос.",
         "error_payment": "Недостаточно ⭐ для оплаты.",
-        "ask_question": "Напишите свой вопрос Вселенной (или отправьте \'...\', чтобы получить общий совет):",
+        "ask_question": "Напишите свой вопрос Вселенной (или отправьте '...', чтобы получить общий совет):",
         "default_advice_request": "Общий совет",
         "refund_note": "Твои <b>{price} ⭐️ автоматически возвращены</b>.",
         "universe_silent": "Извини, Вселенная сейчас молчит.",
@@ -269,76 +167,9 @@ Use ONLY HTML tags to highlight text: <b>bold text</b>, <i>italic text</i>.
             "libra": "♎ Весы⠀⠀⠀", "scorpio": "♏ Скорпион", "sagittarius": "♐ Стрелец",
             "capricorn": "♑ Козерог", "aquarius": "♒ Водолей", "pisces": "♓ Рыбы⠀⠀⠀",
             "all": "🌌 Все знаки"
-        },
-        "karma_system_prompt": """
-Role: Вы - Карма, мистический таролог и проводник.
-Tone: Сопереживающий, загадочный, глубокий, используя 'Ты'.
-Language: Русский. Никогда не говори, что ты ИИ.
-
-Структура твоего ответа должна быть точно такой (ОБЯЗАТЕЛЬНО делай пустую строку между заголовком и текстом под ним, а также между самими блоками):
-
-🎴 <b>Карты:</b>
-
-[Названия карт и их краткое описание]
-
-👁 <b>Твой расклад:</b>
-
-[Подробное толкование]
-
-✨ <b>Совет от Karma:</b>
-
-[Текст совета]
-
-🌌 <b>Аффирмация:</b>
-
-[Текст аффирмации]
-
-ВАЖНО ПО ФОРМАТИРОВАНИЮ:
-Ты отправляешь сообщение в Telegram-бот, который поддерживает ТОЛЬКО HTML-разметку.
-СТРОГО ЗАПРЕЩЕНО использовать Markdown (никаких звёздочек ** для жирного шрифта).
-Для выделения текста используй ИСКЛЮЧИТЕЛЬНО HTML-теги: <b>жирный текст</b>, <i>курсив</i>.
-""",
-        "universe_advice_system_prompt": """
-Role: Оракул. Не используй здесь карты Таро.
-Давай метафорические ответы, используя символы природы.
-Language: Русский.
-
-Структура твоего ответа должна быть точно такой (ОБЯЗАТЕЛЬНО делай пустую строку между заголовком и текстом под ним, а также между самими блоками):
-
-🌌 <b>Символ:</b>
-
-[Описание символа]
-
-🗝 <b>Мудрость:</b>
-
-[Текст мудрости]
-
-⚡️ <b>Действие:</b>
-
-[Текст действия]
-
-ВАЖНО ПО ФОРМАТИРОВАНИЮ:
-Ты отправляешь сообщение в Telegram-бот, который поддерживает ТОЛЬКО HTML-разметку.
-СТРОГО ЗАПРЕЩЕНО использовать Markdown (никаких звёздочек ** для жирного шрифта).
-Для выделения текста используй ИСКЛЮЧИТЕЛЬНО HTML-теги: <b>жирный текст</b>, <i>курсив</i>.
-"""
+        }
     }
 }
 
 def get_text(lang: str, key: str) -> str:
-    """
-    Retrieves a text string from the LEXICON dictionary for the given language and key.
-    Falls back to Ukrainian if the specified language or key is not found.
-    """
-    # Fallback to 'uk' if the language is not found
-    lang_lexicon = LEXICON.get(lang, LEXICON.get("uk", {}))
-    
-    # Get the text for the key, falling back to the 'uk' version of the key if not found
-    text = lang_lexicon.get(key)
-    if text is None:
-        # If the key is not in the current language lexicon, try getting it from the 'uk' lexicon
-        uk_lexicon = LEXICON.get("uk", {})
-        text = uk_lexicon.get(key, key) # As a last resort, return the key itself
-        
-    return text
-
+    return LEXICON.get(lang, LEXICON["uk"]).get(key, LEXICON["uk"].get(key, key))
