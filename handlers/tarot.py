@@ -108,8 +108,11 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
     await callback.answer()
     
-    # Відправляємо текст про тасування колоди без штучних затримок
-    msg = await callback.message.answer(get_text(lang, "loading_daily_3"), parse_mode="HTML")
+    msg = await callback.message.answer(get_text(lang, "loading_daily_1"), parse_mode="HTML")
+    await asyncio.sleep(2.0) # <--- ОСЬ ЦЕЙ ГАЛЬМУЄ
+    await msg.edit_text(get_text(lang, "loading_daily_2"), parse_mode="HTML")
+    await asyncio.sleep(2.0) # <--- І ЦЕЙ ГАЛЬМУЄ
+    await msg.edit_text(get_text(lang, "loading_daily_3"), parse_mode="HTML")
     
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
