@@ -33,23 +33,37 @@ async def command_start(message: Message, db: firestore.Client) -> None:
 async def process_language_selection(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user: return
     
+    # Зберігаємо мову
     lang = callback.data.split(":")[1]
     await update_user_language(db, callback.from_user.id, lang)
     
     await callback.answer(get_text(lang, "lang_saved"))
     await callback.message.delete()
     
+    # Формуємо текст
     user_name = callback.from_user.first_name or "душе"
     welcome_text = get_text(lang, "welcome_text").format(name=user_name)
     
-    IMG_WELCOME = "https://i.postimg.cc/QtxVfPkt/photo-2025-02-28-20-43-34.jpg" 
+    IMG_WELCOME = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png" 
     
-    await callback.message.answer_photo(
-        photo=IMG_WELCOME,
-        caption=welcome_text,
-        reply_markup=main_menu_kb(lang),
-        parse_mode="HTML"
-    )
+    # 👇 Бронебійна відправка з підстраховкою
+    try:
+        # Спершу пробуємо відправити з картинкою
+        await callback.message.answer_photo(
+            photo=IMG_WELCOME,
+            caption=welcome_text,
+            reply_markup=main_menu_kb(lang),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Помилка відправки картинки привітання: {e}")
+        # Якщо картинка "зламалась", відправляємо просто текст!
+        await callback.message.answer(
+            text=welcome_text,
+            reply_markup=main_menu_kb(lang),
+            parse_mode="HTML"
+        )
 
 @router.callback_query(F.data == CB_PROFILE)
 async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
