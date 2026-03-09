@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from firebase_admin import firestore
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from firebase_db import InsufficientBalanceError, ensure_user, get_balance, increment_balance, get_user_language
 from lexicon import get_text
@@ -18,15 +19,23 @@ router = Router()
 
 ADVICE_PRICE = 1
 
-# Мультимовні картинки для Поради Всесвіту
-IMAGES_ADVICE = {
-    "uk": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png",
-    "en": "https://i.postimg.cc/vBtwWzf0/b_A_richly_detailed_Ta_4_en.png", # 👈 Встав посилання
-    "ru": "https://i.postimg.cc/MTmJyDVs/b_A_richly_detailed_Ta_4_ru.png"  # 👈 Встав посилання
-}
-
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
+
+# 👇 Налаштування безпеки для Поради Всесвіту
+SAFETY_SETTINGS = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
+
+# Мультимовні картинки
+IMAGES_ADVICE = {
+    "uk": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png",
+    "en": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png", # 👈 Можеш потім замінити на англійське посилання
+    "ru": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png"  # 👈 Можеш потім замінити на російське посилання
+}
 
 class AdviceStates(StatesGroup):
     waiting_for_question = State()
@@ -34,8 +43,11 @@ class AdviceStates(StatesGroup):
 async def _gemini_text(model: Any, prompt: str) -> str:
     def _sync():
         try:
-            resp = model.generate_content(prompt)
-            return (getattr(resp, "text", "") or "").strip()
+            # Передаємо налаштування безпеки
+            resp = model.generate_content(prompt, safety_settings=SAFETY_SETTINGS)
+            if not resp or not hasattr(resp, "candidates") or not resp.candidates:
+                return ""
+            return resp.text.strip()
         except Exception as e:
             print(f"Advice Gen Error: {e}")
             return ""
@@ -93,19 +105,15 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
     data = await state.get_data()
     price = data.get("price", 1)
 
-    # 👇 ОСЬ ЦЯ АНІМАЦІЯ ОЧІКУВАННЯ, ЯКА ЗНИКЛА
     msg = await message.answer(get_text(lang, "loading_advice"), reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
     
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
     
-    # Формуємо промпт
     prompt = f"Користувач запитує: '{user_text}'. Дай глибоку, філософську, але практичну пораду. Використовуй емодзі.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings or quotes) exclusively in {target_language} language!"
     
-    # 👇 ОСЬ ЦЕЙ РЯДОК БУВ ВИДАЛЕНИЙ (ГЕНЕРАЦІЯ ТЕКСТУ)
     text = await _gemini_text(advice_model, prompt)
     
-    # Видаляємо анімацію очікування
     await msg.delete()
 
     if not text:
@@ -122,13 +130,9 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
         await state.clear()
         return
 
-    # Відправка правильної картинки залежно від мови
     current_img = IMAGES_ADVICE.get(lang, IMAGES_ADVICE["uk"])
     await message.answer_photo(photo=current_img, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
     
-    # Відправлення самого тексту поради
     await message.answer(text, parse_mode="HTML")
-    
-    # Відправляємо меню
     await message.answer(get_text(lang, "more_action_btn"), reply_markup=main_menu_kb(lang), parse_mode="HTML")
     await state.clear()

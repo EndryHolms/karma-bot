@@ -22,7 +22,6 @@ from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
 from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
-# 👇 Налаштування безпеки (дозволяємо ШІ говорити про езотерику без блокування)
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -48,12 +47,10 @@ async def main() -> None:
     settings = load_settings()
     db = await init_firestore(settings.firebase_cred_path)
 
-    # Конфігурація Gemini
     genai.configure(api_key=settings.gemini_api_key)
 
-    # 👇 Ініціалізуємо моделі з правильними налаштуваннями
-    # Використовуємо gemini-2.0-flash (вона стабільніша за Lite для ворожіння)
-    model_name = "gemini-2.0-flash" 
+    # 👇 ПЕРЕХОДИМО НА 3.1 FLASH LITE
+    model_name = "gemini-3.1-flash-lite-preview" 
     
     tarot_model = genai.GenerativeModel(
         model_name=model_name,
@@ -68,22 +65,24 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Реєстрація Middleware
     dp.update.middleware(ThrottlingMiddleware(rate_limit=3.0))
 
-    # Передача даних у роутери
-    dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model, safety_settings=SAFETY_SETTINGS)
+    # Додаємо safety_settings сюди
+    dp.workflow_data.update(
+        db=db, 
+        tarot_model=tarot_model, 
+        advice_model=advice_model, 
+        safety_settings=SAFETY_SETTINGS
+    )
 
     dp.include_router(payment_router)
     dp.include_router(start_router)
     dp.include_router(tarot_router)
     dp.include_router(advice_router)
 
-    # Веб-сервер
     port = int(os.environ.get("PORT", 8080))
     web_task = asyncio.create_task(_run_web_server(port))
 
-    # Планувальник
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     scheduler.add_job(send_daily_reminders, trigger='cron', hour=12, minute=0, args=[bot, db])
     scheduler.add_job(send_daily_horoscope, trigger='cron', hour=9, minute=0, args=[bot, db, tarot_model])
