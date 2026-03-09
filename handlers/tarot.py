@@ -108,19 +108,23 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
     await callback.answer()
     
-    msg = await callback.message.answer(get_text(lang, "loading_daily_1"), parse_mode="HTML")
-    await asyncio.sleep(2.0) # <--- ОСЬ ЦЕЙ ГАЛЬМУЄ
-    await msg.edit_text(get_text(lang, "loading_daily_2"), parse_mode="HTML")
-    await asyncio.sleep(2.0) # <--- І ЦЕЙ ГАЛЬМУЄ
-    await msg.edit_text(get_text(lang, "loading_daily_3"), parse_mode="HTML")
-    
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
-    
     prompt = f"Витягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
     
+    # 👇 1. МАГІЯ ПРИСКОРЕННЯ: Запускаємо Gemini у фоні ОДРАЗУ!
+    ai_task = asyncio.create_task(_gemini_generate_text(tarot_model, prompt))
+    
+    # 👇 2. ПОКИ GEMINI ДУМАЄ, показуємо театральні ефекти (час іде паралельно)
+    msg = await callback.message.answer(get_text(lang, "loading_daily_1"), parse_mode="HTML")
+    await asyncio.sleep(1.5)
+    await msg.edit_text(get_text(lang, "loading_daily_2"), parse_mode="HTML")
+    await asyncio.sleep(1.5)
+    await msg.edit_text(get_text(lang, "loading_daily_3"), parse_mode="HTML")
+    
+    # 👇 3. ОТРИМУЄМО РЕЗУЛЬТАТ (Gemini вже встиг його згенерувати або майже закінчив)
     try:
-        text = await _gemini_generate_text(tarot_model, prompt)
+        text = await ai_task
         if text:
             db.collection("users").document(user_id).update({"last_daily_card_date": datetime.now().strftime("%Y-%m-%d")})
         
@@ -135,7 +139,10 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
                 await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
     except Exception as e:
         print(f"Daily Handler Error: {e}")
-        await msg.edit_text(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
+        try: await msg.delete() 
+        except: pass
+        if callback.message:
+            await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
 
 
 @router.callback_query(F.data == CB_RELATIONSHIP)
