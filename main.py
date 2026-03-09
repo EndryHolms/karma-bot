@@ -25,8 +25,8 @@ from handlers.payment import router as payment_router
 from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
 
-# Імпортуємо системні промпти
-from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
+# Імпортуємо функції для отримання системних промптів
+from prompts import get_karma_system_prompt, get_universe_advice_system_prompt
 
 
 async def health_check(request: web.Request) -> web.Response:
@@ -83,20 +83,17 @@ async def main() -> None:
     # КОНФІГУРАЦІЯ GEMINI
     genai.configure(api_key=settings.gemini_api_key)
 
-    # ВАЖЛИВА ЗМІНА:
-    # Використовуємо "gemini-1.5-flash" замість "2.5-lite".
-    # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.
-    # Ініціалізуємо стандартні моделі без підстраховки
+    # Ініціалізуємо моделі з українським системним промптом за замовчуванням
     tarot_model = SafeGeminiModel(
         primary_name=settings.primary_model_name,
         fallback_name=settings.fallback_model_name,
-        system_instruction=KARMA_SYSTEM_PROMPT
+        system_instruction=get_karma_system_prompt("uk")
     )
 
     advice_model = SafeGeminiModel(
         primary_name=settings.primary_model_name,
         fallback_name=settings.fallback_model_name,
-        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT
+        system_instruction=get_universe_advice_system_prompt("uk")
     )
 
     bot = Bot(
@@ -106,7 +103,6 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
 
-    # ДОДАЙ ЦІ ДВА РЯДКИ:
     # Вмикаємо ліміт 3 секунди на текстові повідомлення та кліки по кнопках
     dp.message.middleware(ThrottlingMiddleware(rate_limit=3.0))
     dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=3.0))
