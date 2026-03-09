@@ -1,4 +1,5 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from lexicon import get_text
 
 # Константи для Callback Data (щоб не помилитися в буквах)
 CB_DAILY = "daily_card"
@@ -8,24 +9,28 @@ CB_ADVICE = "universe_advice"
 CB_PROFILE = "profile_balance"
 CB_BACK_MENU = "back_to_menu"
 
-def main_menu_kb() -> InlineKeyboardMarkup:
+def language_selection_kb() -> InlineKeyboardMarkup:
+    """Клавіатура вибору мови"""
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        # 👇 Змінено за вашим проханням
-        [InlineKeyboardButton(text="✨ Карта дня (Безкоштовно)", callback_data=CB_DAILY)],
-        
-        # 👇 Ваші нові назви зі скріншота
-        [InlineKeyboardButton(text="❤️ Любов та Стосунки (75 ⭐️)", callback_data=CB_RELATIONSHIP)],
-        [InlineKeyboardButton(text="💰 Гроші та Реалізація (100 ⭐️)", callback_data=CB_CAREER)],
-        
-        [InlineKeyboardButton(text="🧘 Порада Всесвіту (25 ⭐️)", callback_data=CB_ADVICE)],
-        
-        [InlineKeyboardButton(text="👤 Моя карма (баланс)", callback_data=CB_PROFILE)],
+        [InlineKeyboardButton(text="🇺🇦 Українська", callback_data="set_lang:uk")],
+        [InlineKeyboardButton(text="🇬🇧 English", callback_data="set_lang:en")],
+        [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang:ru")]
     ])
     return kb
 
-def back_to_menu_kb() -> InlineKeyboardMarkup:
+def main_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Назад в меню", callback_data=CB_BACK_MENU)]
+        [InlineKeyboardButton(text=get_text(lang, "menu_daily"), callback_data=CB_DAILY)],
+        [InlineKeyboardButton(text=get_text(lang, "menu_love"), callback_data=CB_RELATIONSHIP)],
+        [InlineKeyboardButton(text=get_text(lang, "menu_career"), callback_data=CB_CAREER)],
+        [InlineKeyboardButton(text=get_text(lang, "menu_advice"), callback_data=CB_ADVICE)],
+        [InlineKeyboardButton(text=get_text(lang, "menu_profile"), callback_data=CB_PROFILE)],
+    ])
+    return kb
+
+def back_to_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_BACK_MENU)]
     ])
     return kb
 # Додай ці константи до інших зверху:

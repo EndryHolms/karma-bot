@@ -135,3 +135,15 @@ async def update_user_zodiac(db: firestore.Client, user_id: int, zodiac_key: str
     """Оновлює або встановлює знак зодіаку для користувача"""
     doc_ref = db.collection("users").document(str(user_id))
     doc_ref.set({"zodiac_sign": zodiac_key}, merge=True)
+
+async def update_user_language(db: firestore.Client, user_id: int, lang: str) -> None:
+    """Зберігає обрану мову користувача"""
+    doc_ref = db.collection("users").document(str(user_id))
+    doc_ref.set({"language": lang}, merge=True)
+
+async def get_user_language(db: firestore.Client, user_id: int) -> str:
+    """Отримує мову користувача (за замовчуванням 'uk')"""
+    doc = db.collection("users").document(str(user_id)).get()
+    if doc.exists:
+        return doc.to_dict().get("language", "uk")
+    return "uk"

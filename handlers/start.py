@@ -2,6 +2,9 @@ from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
 from firebase_admin import firestore
+from firebase_db import update_user_language, get_user_language
+from keyboards import language_selection_kb
+from lexicon import get_text
 
 # Додай сюди імпорт нових функцій:
 from firebase_db import ensure_user, get_balance, update_user_zodiac
@@ -15,30 +18,36 @@ WELCOME_IMAGE_URL = "https://i.postimg.cc/7hWHVtr6/Gemini-Generated-Image-y1ell9
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, db: firestore.Client) -> None:
-    user = message.from_user
-    await ensure_user(
-        db,
-        user_id=user.id,
-        username=user.username or "",
-        first_name=user.first_name or "",
+async def command_start(message: Message, db: firestore.Client) -> None:
+    if not message.from_user: return
+    await ensure_user(db, message.from_user.id, message.from_user.username or "", message.from_user.first_name or "")
+    
+    # Завжди при старті пропонуємо обрати мову (текст беремо одразу трьома мовами)
+    await message.answer(
+        get_text("uk", "choose_language"), 
+        reply_markup=language_selection_kb()
     )
 
-    text = (
-        f"Вітаю, <b>{user.first_name}</b>. Я — Karma.\n\n"
-        "Я тут, щоб освітити твій шлях, коли стає темно. "
-        "Пам'ятай: карти не вирішують за тебе, вони лише показують вірогідності.\n\n"
-        "<b>Що турбує твою душу сьогодні?</b>"
+# 👇 ДОДАЄМО НОВИЙ ОБРОБНИК ДЛЯ КНОПОК МОВИ 👇
+@router.callback_query(F.data.startswith("set_lang:"))
+async def process_language_selection(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user: return
+    
+    # Витягуємо обрану мову (uk, en або ru)
+    lang = callback.data.split(":")[1]
+    
+    # Зберігаємо в базу
+    await update_user_language(db, callback.from_user.id, lang)
+    
+    # Відповідаємо спливаючим вікном на обраній мові
+    await callback.answer(get_text(lang, "lang_saved"))
+    
+    # Видаляємо повідомлення з вибором мови і показуємо головне меню!
+    await callback.message.delete()
+    await callback.message.answer(
+        "✨", # Тут пізніше зробимо гарне привітання різними мовами
+        reply_markup=main_menu_kb(lang)
     )
-
-    try:
-        await message.answer_photo(
-            photo=WELCOME_IMAGE_URL,
-            caption=text,
-            reply_markup=main_menu_kb(),
-        )
-    except Exception:
-        await message.answer(text, reply_markup=main_menu_kb())
 
 
 @router.callback_query(F.data == CB_BACK_MENU)
