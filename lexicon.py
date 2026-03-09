@@ -27,8 +27,6 @@ LEXICON = {
         "refund_note": "Твої <b>{price} ⭐️ автоматично повернуто</b>.",
         "universe_silent": "Вибач, Всесвіт зараз мовчить.",
         "universe_answer": "✨ <i>Відповідь Всесвіту:</i>",
-        
-        # 👇 НОВІ ТЕКСТИ ДЛЯ ТАРО 👇
         "daily_already_opened": "Твоя карта на сьогодні вже відкрита!",
         "loading_daily_1": "🔮 <i>Запитую карту дня...</i>",
         "loading_daily_2": "🧘 <i>Налаштовуюся на твої вібрації...</i>",
@@ -45,8 +43,19 @@ LEXICON = {
         "loading_love_cards": "<i>Karma розкладає карти на: Ваші почуття, Приховані думки, Майбутнє...</i>",
         "cards_on_table": "✨ <i>Карти лягли на стіл...</i>",
         "magic_interrupted": "🌪 <i>Магічний ефір раптово перервався... Карти не захотіли говорити.</i>\n\nНе хвилюйся. {refund_note} Спробуй запитати ще раз за кілька хвилин.",
-        "refund_note_balance": "Твої <b>{price} ⭐️ автоматично повернуто</b> на баланс.", # <--- ОСЬ ТУТ ДОДАНО КОМУ
-        "magic_wait": "🧘 Зачекай... Магія не терпить поспіху."
+        "refund_note_balance": "Твої <b>{price} ⭐️ автоматично повернуто</b> на баланс.",
+        "magic_wait": "🧘 Зачекай... Магія не терпить поспіху.",
+        "zodiac_setup_title": "🔮 <b>Обери свій знак Зодіаку:</b>\n\nЯкщо обереш конкретний знак, я надсилатиму гороскоп тільки для нього. Якщо обереш «Усі знаки» — отримуватимеш повний список, щоб ділитися з друзями!",
+        "btn_all_signs": "🌌 Надсилати усі знаки",
+        "btn_back_profile": "🔙 Назад до профілю",
+        "zodiac_saved": "✅ Знак збережено!",
+        "zodiacs": {
+            "aries": "♈ Овен⠀⠀⠀", "taurus": "♉ Телець⠀", "gemini": "♊ Близн.⠀",
+            "cancer": "♋ Рак⠀⠀⠀⠀", "leo": "♌ Лев⠀⠀⠀⠀", "virgo": "♍ Діва⠀⠀⠀",
+            "libra": "♎ Терези⠀", "scorpio": "♏ Скорп.⠀", "sagittarius": "♐ Стріл.⠀",
+            "capricorn": "♑ Козеріг", "aquarius": "♒ Водолій", "pisces": "♓ Риби⠀⠀⠀",
+            "all": "🌌 Усі знаки"
+        }
     },
     "en": {
         "menu_daily": "✨ Card of the Day (Free)",
@@ -74,8 +83,6 @@ LEXICON = {
         "refund_note": "Your <b>{price} ⭐️ have been automatically refunded</b>.",
         "universe_silent": "Sorry, the Universe is silent right now.",
         "universe_answer": "✨ <i>Universe's Answer:</i>",
-        
-        # 👇 НОВІ ТЕКСТИ ДЛЯ ТАРО 👇
         "daily_already_opened": "Your card for today is already open!",
         "loading_daily_1": "🔮 <i>Asking for the card of the day...</i>",
         "loading_daily_2": "🧘 <i>Tuning into your vibrations...</i>",
@@ -92,8 +99,19 @@ LEXICON = {
         "loading_love_cards": "<i>Karma is laying out the cards for: Your feelings, Hidden thoughts, Future...</i>",
         "cards_on_table": "✨ <i>The cards are on the table...</i>",
         "magic_interrupted": "🌪 <i>The magical ether was suddenly interrupted... The cards refused to speak.</i>\n\nDon't worry. {refund_note} Try asking again in a few minutes.",
-        "refund_note_balance": "Your <b>{price} ⭐️ have been automatically refunded</b> to your balance.", # <--- ОСЬ ТУТ ДОДАНО КОМУ
-        "magic_wait": "🧘 Wait... Magic doesn't tolerate haste."
+        "refund_note_balance": "Your <b>{price} ⭐️ have been automatically refunded</b> to your balance.",
+        "magic_wait": "🧘 Wait... Magic doesn't tolerate haste.",
+        "zodiac_setup_title": "🔮 <b>Choose your Zodiac sign:</b>\n\nIf you select a specific sign, I will send the horoscope only for it. If you choose 'All signs', you will receive the full list to share with friends!",
+        "btn_all_signs": "🌌 Send all signs",
+        "btn_back_profile": "🔙 Back to Profile",
+        "zodiac_saved": "✅ Sign saved!",
+        "zodiacs": {
+            "aries": "♈ Aries⠀⠀", "taurus": "♉ Taurus⠀", "gemini": "♊ Gemini⠀",
+            "cancer": "♋ Cancer⠀", "leo": "♌ Leo⠀⠀⠀", "virgo": "♍ Virgo⠀⠀",
+            "libra": "♎ Libra⠀⠀", "scorpio": "♏ Scorpio", "sagittarius": "♐ Sagitt.⠀",
+            "capricorn": "♑ Capric.", "aquarius": "♒ Aquarius", "pisces": "♓ Pisces⠀",
+            "all": "🌌 All signs"
+        }
     },
     "ru": {
         "menu_daily": "✨ Карта дня (Бесплатно)",
@@ -121,8 +139,6 @@ LEXICON = {
         "refund_note": "Твои <b>{price} ⭐️ автоматически возвращены</b>.",
         "universe_silent": "Извини, Вселенная сейчас молчит.",
         "universe_answer": "✨ <i>Ответ Вселенной:</i>",
-        
-        # 👇 НОВІ ТЕКСТИ ДЛЯ ТАРО 👇
         "daily_already_opened": "Твоя карта на сегодня уже открыта!",
         "loading_daily_1": "🔮 <i>Спрашиваю карту дня...</i>",
         "loading_daily_2": "🧘 <i>Настраиваюсь на твои вибрации...</i>",
@@ -139,8 +155,19 @@ LEXICON = {
         "loading_love_cards": "<i>Karma раскладывает карты на: Ваши чувства, Скрытые мысли, Будущее...</i>",
         "cards_on_table": "✨ <i>Карты легли на стол...</i>",
         "magic_interrupted": "🌪 <i>Магический эфир внезапно прервался... Карты не захотели говорить.</i>\n\nНе волнуйся. {refund_note} Попробуй спросить еще раз через несколько минут.",
-        "refund_note_balance": "Твои <b>{price} ⭐️ автоматически возвращены</b> на баланс.", # <--- ОСЬ ТУТ ДОДАНО КОМУ
-        "magic_wait": "🧘 Подожди... Магия не терпит спешки."
+        "refund_note_balance": "Твои <b>{price} ⭐️ автоматически возвращены</b> на баланс.",
+        "magic_wait": "🧘 Подожди... Магия не терпит спешки.",
+        "zodiac_setup_title": "🔮 <b>Выбери свой знак Зодиака:</b>\n\nЕсли выберешь конкретный знак, я буду присылать гороскоп только для него. Если выберешь «Все знаки» — будешь получать полный список, чтобы делиться с друзьями!",
+        "btn_all_signs": "🌌 Присылать все знаки",
+        "btn_back_profile": "🔙 Назад в профиль",
+        "zodiac_saved": "✅ Знак сохранен!",
+        "zodiacs": {
+            "aries": "♈ Овен⠀⠀⠀", "taurus": "♉ Телец⠀⠀", "gemini": "♊ Близнецы",
+            "cancer": "♋ Рак⠀⠀⠀⠀", "leo": "♌ Лев⠀⠀⠀⠀", "virgo": "♍ Дева⠀⠀⠀",
+            "libra": "♎ Весы⠀⠀⠀", "scorpio": "♏ Скорпион", "sagittarius": "♐ Стрелец",
+            "capricorn": "♑ Козерог", "aquarius": "♒ Водолей", "pisces": "♓ Рыбы⠀⠀⠀",
+            "all": "🌌 Все знаки"
+        }
     }
 }
 

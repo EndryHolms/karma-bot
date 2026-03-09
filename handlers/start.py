@@ -1,27 +1,22 @@
-from aiogram import F, Router
+import logging
+from aiogram import Router, F
 from aiogram.filters import CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message, CallbackQuery
 from firebase_admin import firestore
-from firebase_db import update_user_language, get_user_language
-from keyboards import language_selection_kb
+
+from firebase_db import ensure_user, get_user_language, update_user_language
 from lexicon import get_text
-
-# Додай сюди імпорт нових функцій:
-from firebase_db import ensure_user, get_balance, update_user_zodiac
-from keyboards import CB_BACK_MENU, CB_PROFILE, main_menu_kb, ZODIACS, zodiac_selection_kb, CB_CHANGE_ZODIAC
-
-
+from keyboards import (
+    language_selection_kb, main_menu_kb, back_to_menu_kb, 
+    zodiac_selection_kb, CB_PROFILE, CB_BACK_MENU, CB_CHANGE_ZODIAC
+)
 
 router = Router()
-
-WELCOME_IMAGE_URL = "https://i.postimg.cc/7hWHVtr6/Gemini-Generated-Image-y1ell9y1ell9y1el-(1).png"
-
 
 @router.message(CommandStart())
 async def command_start(message: Message, db: firestore.Client) -> None:
     if not message.from_user: return
     
-    # 👇 ТУТ ВИПРАВЛЕНО: додано user_id=, username=, first_name=
     await ensure_user(
         db, 
         user_id=message.from_user.id, 
@@ -29,65 +24,33 @@ async def command_start(message: Message, db: firestore.Client) -> None:
         first_name=message.from_user.first_name or ""
     )
     
-    # Завжди при старті пропонуємо обрати мову (текст беремо одразу трьома мовами)
     await message.answer(
         get_text("uk", "choose_language"), 
         reply_markup=language_selection_kb()
     )
 
-# 👇 ДОДАЄМО НОВИЙ ОБРОБНИК ДЛЯ КНОПОК МОВИ 👇
 @router.callback_query(F.data.startswith("set_lang:"))
 async def process_language_selection(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user: return
     
-    # Витягуємо обрану мову
     lang = callback.data.split(":")[1]
-    
-    # Зберігаємо в базу
     await update_user_language(db, callback.from_user.id, lang)
     
-    # Відповідаємо спливаючим вікном
     await callback.answer(get_text(lang, "lang_saved"))
-    
-    # Видаляємо повідомлення з вибором мови
     await callback.message.delete()
     
-    # Отримуємо ім'я користувача для привітання
     user_name = callback.from_user.first_name or "душе"
-    
-    # Підставляємо ім'я у текст зі словника
     welcome_text = get_text(lang, "welcome_text").format(name=user_name)
     
-    # 👇 ВСТАВ СЮДИ ПОСИЛАННЯ НА СВОЮ ОРИГІНАЛЬНУ КАРТИНКУ 👇
+    # 👇 ВСТАВ СЮДИ ПОСИЛАННЯ НА СВОЮ ОРИГІНАЛЬНУ КАРТИНКУ ПРИВІТАННЯ 👇
     IMG_WELCOME = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png" 
     
-    # Відправляємо КАРТИНКУ з текстом і меню
     await callback.message.answer_photo(
         photo=IMG_WELCOME,
         caption=welcome_text,
         reply_markup=main_menu_kb(lang),
         parse_mode="HTML"
     )
-
-
-@router.callback_query(F.data == CB_BACK_MENU)
-async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client) -> None:
-    """Обробник для кнопки 'Назад в меню'"""
-    if not callback.from_user: return
-    
-    # Витягуємо мову через нашу функцію
-    lang = await get_user_language(db, callback.from_user.id)
-    
-    text = get_text(lang, "main_menu_title")
-    kb = main_menu_kb(lang) # Передаємо мову в клавіатуру!
-
-    if callback.message:
-        try:
-            await callback.message.edit_text(text, reply_markup=kb)
-        except Exception:
-            await callback.message.answer(text, reply_markup=kb)
-    await callback.answer()
-
 
 @router.callback_query(F.data == CB_PROFILE)
 async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
@@ -97,17 +60,13 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
     doc = db.collection("users").document(user_id).get()
     user_data = doc.to_dict() or {}
     
-    # Витягуємо мову користувача (якщо немає - беремо 'uk')
     lang = user_data.get("language", "uk")
-    
     balance = user_data.get("balance", 0)
     current_zodiac = user_data.get("zodiac_sign", "all")
     
-    # Тимчасовий переклад для статусу "Усі знаки"
-    all_signs_translation = {"uk": "🌌 Усі знаки", "en": "🌌 All signs", "ru": "🌌 Все знаки"}
-    zodiac_name = ZODIACS.get(current_zodiac, all_signs_translation.get(lang, "🌌 Усі знаки"))
+    zodiac_dict = get_text(lang, "zodiacs")
+    zodiac_name = zodiac_dict.get(current_zodiac, zodiac_dict.get("all"))
 
-    # Беремо текст профілю зі словника і підставляємо дані
     text = get_text(lang, "profile_text").format(balance=balance, zodiac=zodiac_name)
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -118,38 +77,51 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
 
     if callback.message:
         try:
-            await callback.message.edit_text(text, reply_markup=profile_kb)
+            await callback.message.edit_text(text, reply_markup=profile_kb, parse_mode="HTML")
         except Exception:
-            await callback.message.answer(text, reply_markup=profile_kb)
+            await callback.message.answer(text, reply_markup=profile_kb, parse_mode="HTML")
     await callback.answer()
 
-
-# 👇 ДОДАЄМО ОБРОБНИКИ ДЛЯ ГОРОСКОПУ 👇
-
-@router.callback_query(F.data == CB_CHANGE_ZODIAC)
-async def change_zodiac_menu(callback: CallbackQuery) -> None:
-    """Показує клавіатуру вибору знаку"""
-    if callback.message:
-        await callback.message.edit_text(
-            "🔮 <b>Обери свій знак Зодіаку:</b>\n\n"
-            "Якщо обереш конкретний знак, я надсилатиму гороскоп тільки для нього. "
-            "Якщо обереш «Усі знаки» — отримуватимеш повний список, щоб ділитися з друзями!",
-            reply_markup=zodiac_selection_kb()
-        )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("set_zodiac:"))
-async def process_zodiac_selection(callback: CallbackQuery, db: firestore.Client) -> None:
-    """Зберігає обраний знак у базу"""
+@router.callback_query(F.data == CB_BACK_MENU)
+async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user: return
     
-    zodiac_key = callback.data.split(":")[1]
-    await update_user_zodiac(db, callback.from_user.id, zodiac_key)
+    lang = await get_user_language(db, callback.from_user.id)
+    text = get_text(lang, "main_menu_title")
+    kb = main_menu_kb(lang) 
+
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception:
+            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+@router.callback_query(F.data == CB_CHANGE_ZODIAC)
+async def setup_zodiac(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user: return
     
-    zodiac_name = ZODIACS.get(zodiac_key, "🌌 Усі знаки")
+    lang = await get_user_language(db, callback.from_user.id)
+    text = get_text(lang, "zodiac_setup_title")
+    kb = zodiac_selection_kb(lang)
     
-    await callback.message.answer(
-        get_text(lang, "welcome_text"),
-        reply_markup=main_menu_kb(lang)
-    )
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception:
+            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("set_zodiac:"))
+async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user: return
+    
+    zodiac = callback.data.split(":")[1]
+    user_id = str(callback.from_user.id)
+    
+    db.collection("users").document(user_id).set({"zodiac_sign": zodiac}, merge=True)
+    
+    lang = await get_user_language(db, callback.from_user.id)
+    await callback.answer(get_text(lang, "zodiac_saved"))
+    
+    await profile(callback, db)
