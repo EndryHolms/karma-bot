@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 from firebase_admin import firestore
 
-from firebase_db import ensure_user, get_user_language, update_user_language
+from firebase_db import ensure_user, update_user_language
 from lexicon import get_text
 from keyboards import (
     language_selection_kb, main_menu_kb, back_to_menu_kb, 
@@ -42,8 +42,7 @@ async def process_language_selection(callback: CallbackQuery, db: firestore.Clie
     user_name = callback.from_user.first_name or "душе"
     welcome_text = get_text(lang, "welcome_text").format(name=user_name)
     
-    # 👇 ВСТАВ СЮДИ ПОСИЛАННЯ НА СВОЮ ОРИГІНАЛЬНУ КАРТИНКУ ПРИВІТАННЯ 👇
-    IMG_WELCOME = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png" 
+    IMG_WELCOME = "https://i.postimg.cc/QtxVfPkt/photo-2025-02-28-20-43-34.jpg" 
     
     await callback.message.answer_photo(
         photo=IMG_WELCOME,
@@ -86,7 +85,11 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
 async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user: return
     
-    lang = await get_user_language(db, callback.from_user.id)
+    # 👇 Читаємо напряму з бази
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
+    
     text = get_text(lang, "main_menu_title")
     kb = main_menu_kb(lang) 
 
@@ -101,7 +104,11 @@ async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client) ->
 async def setup_zodiac(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user: return
     
-    lang = await get_user_language(db, callback.from_user.id)
+    # 👇 Читаємо напряму з бази
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
+    
     text = get_text(lang, "zodiac_setup_title")
     kb = zodiac_selection_kb(lang)
     
@@ -121,7 +128,9 @@ async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> N
     
     db.collection("users").document(user_id).set({"zodiac_sign": zodiac}, merge=True)
     
-    lang = await get_user_language(db, callback.from_user.id)
-    await callback.answer(get_text(lang, "zodiac_saved"))
+    # 👇 Читаємо напряму з бази
+    doc = db.collection("users").document(user_id).get()
+    lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
     
+    await callback.answer(get_text(lang, "zodiac_saved"))
     await profile(callback, db)
