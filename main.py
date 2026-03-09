@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 
+
 # 👇 Використовуємо перевірену бібліотеку
 import google.generativeai as genai
 from aiohttp import web
@@ -16,7 +17,7 @@ from firebase_db import init_firestore
 from middleware import ThrottlingMiddleware
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from notifications import send_daily_reminders
+from notifications import send_daily_reminders, send_daily_horoscope
 
 # Імпорти роутерів
 from handlers.advice import router as advice_router
@@ -112,6 +113,8 @@ async def main() -> None:
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     # Налаштовуємо запуск щодня о 12:00 (за Києвом)
     scheduler.add_job(send_daily_reminders, trigger='cron', hour=12, minute=0, args=[bot, db])
+    # НОВА ЗАДАЧА: Ранковий іронічний гороскоп (о 09:00 щодня)
+    scheduler.add_job(send_daily_horoscope, trigger='cron', hour=4, minute=50, args=[bot, db, tarot_model])
     scheduler.start()
     logging.info("⏰ Планувальник завдань запущено.")
 

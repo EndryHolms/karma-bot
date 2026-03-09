@@ -3,8 +3,11 @@ from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
 from firebase_admin import firestore
 
-from firebase_db import ensure_user, get_balance
-from keyboards import CB_BACK_MENU, CB_PROFILE, main_menu_kb
+# Додай сюди імпорт нових функцій:
+from firebase_db import ensure_user, get_balance, update_user_zodiac
+from keyboards import CB_BACK_MENU, CB_PROFILE, main_menu_kb, ZODIACS, zodiac_selection_kb, CB_CHANGE_ZODIAC
+
+
 
 router = Router()
 
@@ -49,31 +52,65 @@ async def back_to_menu(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == CB_PROFILE)
 async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
-    if not callback.from_user:
-        await callback.answer()
-        return
-
-    await ensure_user(
-        db,
-        user_id=callback.from_user.id,
-        username=callback.from_user.username or "",
-        first_name=callback.from_user.first_name or "",
-    )
-
-    balance = await get_balance(db, callback.from_user.id)
+    if not callback.from_user: return
+    
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    user_data = doc.to_dict() or {}
+    
+    balance = user_data.get("balance", 0)
+    current_zodiac = user_data.get("zodiac_sign", "all")
+    zodiac_name = ZODIACS.get(current_zodiac, "🌌 Усі знаки")
 
     text = (
         f"<b>🧘 Твій енергетичний баланс:</b>\n"
         f"✨ Доступно зірок: <b>{balance} ⭐️</b>\n\n"
+        f"🔮 <b>Твій знак Зодіаку:</b> {zodiac_name}\n\n"
         "<b>Як поповнити запаси?</b>\n"
-        "У Всесвіті діє закон обміну. Просто обери будь-який платний розклад, "
-        "і якщо енергії не вистачить — я підкажу шлях до відновлення балансу.\n\n"
+        "У Всесвіті діє закон обміну. Просто обери будь-який платний розклад...\n\n"
         "<i>Енергія нікуди не зникає, вона лише змінює форму.</i>"
     )
 
-    if callback.message:
-        # 👇 ТУТ ЗМІНА: answer замість edit_text
-        # Це створить НОВЕ повідомлення, а старе (розклад) залишиться висіти
-        await callback.message.answer(text, reply_markup=main_menu_kb())
+    # Додаємо кнопку "Налаштувати гороскоп" прямо під профіль
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    profile_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔮 Налаштувати гороскоп", callback_data=CB_CHANGE_ZODIAC)],
+        [InlineKeyboardButton(text="🔙 Назад в меню", callback_data=CB_BACK_MENU)]
+    ])
 
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=profile_kb)
+        except Exception:
+            await callback.message.answer(text, reply_markup=profile_kb)
     await callback.answer()
+
+
+# 👇 ДОДАЄМО ОБРОБНИКИ ДЛЯ ГОРОСКОПУ 👇
+
+@router.callback_query(F.data == CB_CHANGE_ZODIAC)
+async def change_zodiac_menu(callback: CallbackQuery) -> None:
+    """Показує клавіатуру вибору знаку"""
+    if callback.message:
+        await callback.message.edit_text(
+            "🔮 <b>Обери свій знак Зодіаку:</b>\n\n"
+            "Якщо обереш конкретний знак, я надсилатиму гороскоп тільки для нього. "
+            "Якщо обереш «Усі знаки» — отримуватимеш повний список, щоб ділитися з друзями!",
+            reply_markup=zodiac_selection_kb()
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("set_zodiac:"))
+async def process_zodiac_selection(callback: CallbackQuery, db: firestore.Client) -> None:
+    """Зберігає обраний знак у базу"""
+    if not callback.from_user: return
+    
+    zodiac_key = callback.data.split(":")[1]
+    await update_user_zodiac(db, callback.from_user.id, zodiac_key)
+    
+    zodiac_name = ZODIACS.get(zodiac_key, "🌌 Усі знаки")
+    
+    await callback.answer(f"✅ Твій знак змінено на: {zodiac_name}", show_alert=True)
+    # Повертаємо в профіль
+    await profile(callback, db)

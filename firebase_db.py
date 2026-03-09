@@ -131,3 +131,7 @@ async def increment_balance(db: firestore.Client, user_id: int, delta: int) -> i
         return _run(transaction)
 
     return await asyncio.to_thread(_tx_sync)
+async def update_user_zodiac(db: firestore.Client, user_id: int, zodiac_key: str) -> None:
+    """Оновлює або встановлює знак зодіаку для користувача"""
+    doc_ref = db.collection("users").document(str(user_id))
+    doc_ref.set({"zodiac_sign": zodiac_key}, merge=True)

@@ -28,3 +28,50 @@ def back_to_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔙 Назад в меню", callback_data=CB_BACK_MENU)]
     ])
     return kb
+# Додай ці константи до інших зверху:
+CB_CHANGE_ZODIAC = "change_zodiac"
+
+# Словник знаків Зодіаку (щоб зручно було виводити текст)
+ZODIACS = {
+    "aries": "♈ Овен", "taurus": "♉ Телець", "gemini": "♊ Близнюки",
+    "cancer": "♋ Рак", "leo": "♌ Лев", "virgo": "♍ Діва",
+    "libra": "♎ Терези", "scorpio": "♏ Скорпіон", "sagittarius": "♐ Стрілець",
+    "capricorn": "♑ Козеріг", "aquarius": "♒ Водолій", "pisces": "♓ Риби",
+    "all": "🌌 Усі знаки (за замовчуванням)"
+}
+
+def broadcast_horoscope_kb() -> InlineKeyboardMarkup:
+    """Кнопка, яка прикріплюється до загальної розсилки"""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎯 Надсилати тільки мій знак", callback_data=CB_CHANGE_ZODIAC)]
+    ])
+    return kb
+
+def zodiac_selection_kb() -> InlineKeyboardMarkup:
+    """Клавіатура вибору знаку зодіаку"""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="♈ Овен", callback_data="set_zodiac:aries"),
+            InlineKeyboardButton(text="♉ Телець", callback_data="set_zodiac:taurus"),
+            InlineKeyboardButton(text="♊ Близн.", callback_data="set_zodiac:gemini")
+        ],
+        [
+            InlineKeyboardButton(text="♋ Рак", callback_data="set_zodiac:cancer"),
+            InlineKeyboardButton(text="♌ Лев", callback_data="set_zodiac:leo"),
+            InlineKeyboardButton(text="♍ Діва", callback_data="set_zodiac:virgo")
+        ],
+        [
+            InlineKeyboardButton(text="♎ Терези", callback_data="set_zodiac:libra"),
+            InlineKeyboardButton(text="♏ Скорп.", callback_data="set_zodiac:scorpio"),
+            InlineKeyboardButton(text="♐ Стріл.", callback_data="set_zodiac:sagittarius")
+        ],
+        [
+            InlineKeyboardButton(text="♑ Козеріг", callback_data="set_zodiac:capricorn"),
+            InlineKeyboardButton(text="♒ Водолій", callback_data="set_zodiac:aquarius"),
+            InlineKeyboardButton(text="♓ Риби", callback_data="set_zodiac:pisces")
+        ],
+        # Кнопка для повернення до загального гороскопу
+        [InlineKeyboardButton(text="🌌 Надсилати усі знаки", callback_data="set_zodiac:all")],
+        [InlineKeyboardButton(text="🔙 Назад до профілю", callback_data="profile_balance")]
+    ])
+    return kb
