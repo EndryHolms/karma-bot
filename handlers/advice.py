@@ -18,8 +18,13 @@ from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 router = Router()
 
 ADVICE_PRICE = 1
-IMG_ADVICE = "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png" # Космос/зірки
 
+# Мультимовні картинки для Поради Всесвіту
+IMAGES_ADVICE = {
+    "uk": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png",
+    "en": "https://i.postimg.cc/vBtwWzf0/b_A_richly_detailed_Ta_4_en.png", # 👈 Встав посилання
+    "ru": "https://i.postimg.cc/MTmJyDVs/b_A_richly_detailed_Ta_4_ru.png"  # 👈 Встав посилання
+}
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
@@ -98,8 +103,8 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
     
-    prompt = f"Користувач запитує: '{user_text}'. Дай глибоку, філософську, але практичну пораду. Використовуй емодзі.\n\nIMPORTANT: You MUST write your ENTIRE response in {target_language} language!"
-    text = await _gemini_text(advice_model, prompt)
+    # 👇 Жорстка вказівка перекладати всі заголовки та текст
+    prompt = f"Користувач запитує: '{user_text}'. Дай глибоку, філософську, але практичну пораду. Використовуй емодзі.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings or quotes) exclusively in {target_language} language!"
     
     await msg.delete()
 
@@ -118,8 +123,10 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
         await state.clear()
         return
 
-    # Відправка картинки та тексту
-    await message.answer_photo(photo=IMG_ADVICE, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
+# Відправка правильної картинки залежно від мови та тексту
+    current_img = IMAGES_ADVICE.get(lang, IMAGES_ADVICE["uk"])
+    await message.answer_photo(photo=current_img, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
+    
     await message.answer(text, parse_mode="HTML")
     
     # Відправляємо меню
