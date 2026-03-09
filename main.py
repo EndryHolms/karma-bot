@@ -1,1 +1,148 @@
-import asyncio\nimport logging\nimport os\nimport sys\n\n\n# \👇 Використовуємо перевірену бібліотеку\nimport google.generativeai as genai\nfrom aiohttp import web\nfrom aiogram import Bot, Dispatcher\nfrom aiogram.client.default import DefaultBotProperties\nfrom aiogram.enums import ParseMode\nfrom aiogram.fsm.storage.memory import MemoryStorage\n\nfrom config import load_settings\nfrom firebase_db import init_firestore\nfrom middleware import ThrottlingMiddleware\n\nfrom apscheduler.schedulers.asyncio import AsyncIOScheduler\nfrom notifications import send_daily_reminders, send_daily_horoscope\n\n# Імпорти роутерів\nfrom handlers.advice import router as advice_router\nfrom handlers.payment import router as payment_router\nfrom handlers.start import router as start_router\nfrom handlers.tarot import router as tarot_router\n\n# Імпортуємо системні промпти\nfrom prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT\n\n\nasync def health_check(request: web.Request) -> web.Response:\n    \"\"\"Відповідає \'Bot is alive\' для UptimeRobot\"\"\"\n    return web.Response(text=\"Bot is alive\")\n\n\nasync def _run_web_server(port: int) -> None:\n    \"\"\"Запускає веб-сервер на потрібному порті\"\"\"\n    app = web.Application()\n    app.router.add_get(\"/\", health_check)\n\n    runner = web.AppRunner(app)\n    await runner.setup()\n\n    site = web.TCPSite(runner, host=\"0.0.0.0\", port=port)\n    await site.start()\n\n    # Тримаємо сервер запущеним\n    try:\n        await asyncio.Event().wait()\n    finally:\n        await runner.cleanup()\n\nclass SafeGeminiModel:\n    \"\"\"Розумна обгортка, яка автоматично перемикає моделі при помилці\"\"\"\n    def __init__(self, primary_name: str, fallback_name: str, system_instruction: str = None):\n        # Ініціалізуємо одразу дві моделі з однаковими налаштуваннями\n        kwargs = {\"system_instruction\": system_instruction} if system_instruction else {}\n        self.primary = genai.GenerativeModel(primary_name, **kwargs)\n        self.fallback = genai.GenerativeModel(fallback_name, **kwargs)\n\n    def generate_content(self, contents, **kwargs):\n        try:\n            # Спроба №1: Основна модель (flash)\n            return self.primary.generate_content(contents, **kwargs)\n        except Exception as e:\n            import logging\n            logging.warning(f\"⚠️ Основна модель впала ({e}). Перемикаюсь на запасну: {self.fallback.model_name}\")\n            # Спроба №2: Запасна модель (pro)\n            return self.fallback.generate_content(contents, **kwargs)\n\nasync def main() -> None:\n    logging.basicConfig(\n        level=logging.INFO,\n        format=\"%(asctime)s | %(levelname)s | %(name)s | %(message)s\",\n    )\n\n    settings = load_settings()\n\n    # Ініціалізація бази даних\n    db = await init_firestore(settings.firebase_cred_path)\n\n    # \👇 КОНФІГУРАЦІЯ GEMINI\n    genai.configure(api_key=settings.gemini_api_key)\n\n    # \👇 ВАЖЛИВА ЗМІНА:\n    # Використовуємо \"gemini-1.5-flash\" замість \"2.5-lite\".\n    # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.\n    # Ініціалізуємо стандартні моделі без підстраховки\n    tarot_model = SafeGeminiModel(\n        primary_name=settings.primary_model_name,\n        fallback_name=settings.fallback_model_name,\n        system_instruction=KARMA_SYSTEM_PROMPT\n    )\n\n    advice_model = SafeGeminiModel(\n        primary_name=settings.primary_model_name,\n        fallback_name=settings.fallback_model_name,\n        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT\n    )\n\n    bot = Bot(\n        token=settings.bot_token,\n        default=DefaultBotProperties(parse_mode=ParseMode.HTML),\n    )\n\n    dp = Dispatcher(storage=MemoryStorage())\n\n    # \👇 ДОДАЙ ЦІ ДВА РЯДКИ:\n    # Вмикаємо ліміт 3 секунди на текстові повідомлення та кліки по кнопках\n    dp.message.middleware(ThrottlingMiddleware(rate_limit=3.0))\n    dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=3.0))\n\n    # Передаємо моделі в хендлери\n    dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)\n\n    dp.include_router(payment_router)\n    dp.include_router(start_router)\n    dp.include_router(tarot_router)\n    dp.include_router(advice_router)\n\n    # Запуск веб-сервера для UptimeRobot\n    port = int(os.environ.get(\"PORT\", 8080))\n    # Запускаємо сервер в фоні (task), щоб не блокувати бота\n    web_task = asyncio.create_task(_run_web_server(port))\n    logging.info(f\"🌍 Web server started on port {port}\")\n\n    # \👇 ДОДАЄМО ПЛАНУВАЛЬНИК \👇\n    scheduler = AsyncIOScheduler(timezone=\"Europe/Kyiv\")\n    # Налаштовуємо запуск щодня о 12:00 (за Києвом)\n    scheduler.add_job(send_daily_reminders, trigger=\'cron\', hour=12, minute=0, args=[bot, db])\n    # НОВА ЗАДАЧА: Ранковий іронічний гороскоп (о 09:00 щодня)\n    scheduler.add_job(send_daily_horoscope, trigger=\'cron\', hour=9, minute=0, args=[bot, db, tarot_model])\n    scheduler.start()\n    logging.info(\"⏰ Планувальник завдань запущено.\")\n\n    try:\n        await dp.start_polling(bot)\n    finally:\n        web_task.cancel()\n        await asyncio.gather(web_task, return_exceptions=True)\n\n\nif __name__ == \"__main__\":\n    try:\n        asyncio.run(main())\n    except KeyboardInterrupt:\n        sys.exit(0)
+import asyncio
+import logging
+import os
+import sys
+
+
+# 👇 Використовуємо перевірену бібліотеку
+import google.generativeai as genai
+from aiohttp import web
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
+
+from config import load_settings
+from firebase_db import init_firestore
+from middleware import ThrottlingMiddleware
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from notifications import send_daily_reminders, send_daily_horoscope
+
+# Імпорти роутерів
+from handlers.advice import router as advice_router
+from handlers.payment import router as payment_router
+from handlers.start import router as start_router
+from handlers.tarot import router as tarot_router
+
+# Імпортуємо системні промпти
+from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
+
+
+async def health_check(request: web.Request) -> web.Response:
+    """Відповідає 'Bot is alive' для UptimeRobot"""
+    return web.Response(text="Bot is alive")
+
+
+async def _run_web_server(port: int) -> None:
+    """Запускає веб-сервер на потрібному порті"""
+    app = web.Application()
+    app.router.add_get("/", health_check)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    await site.start()
+
+    # Тримаємо сервер запущеним
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()
+
+class SafeGeminiModel:
+    """Розумна обгортка, яка автоматично перемикає моделі при помилці"""
+    def __init__(self, primary_name: str, fallback_name: str, system_instruction: str = None):
+        # Ініціалізуємо одразу дві моделі з однаковими налаштуваннями
+        kwargs = {"system_instruction": system_instruction} if system_instruction else {}
+        self.primary = genai.GenerativeModel(primary_name, **kwargs)
+        self.fallback = genai.GenerativeModel(fallback_name, **kwargs)
+
+    def generate_content(self, contents, **kwargs):
+        try:
+            # Спроба №1: Основна модель (flash)
+            return self.primary.generate_content(contents, **kwargs)
+        except Exception as e:
+            import logging
+            logging.warning(f"⚠️ Основна модель впала ({e}). Перемикаюсь на запасну: {self.fallback.model_name}")
+            # Спроба №2: Запасна модель (pro)
+            return self.fallback.generate_content(contents, **kwargs)
+
+async def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+
+    settings = load_settings()
+
+    # Ініціалізація бази даних
+    db = await init_firestore(settings.firebase_cred_path)
+
+    # 👇 КОНФІГУРАЦІЯ GEMINI
+    genai.configure(api_key=settings.gemini_api_key)
+
+    # 👇 ВАЖЛИВА ЗМІНА:
+    # Використовуємо "gemini-1.5-flash" замість "2.5-lite".
+    # Причина: у 2.5 ліміт 20 запитів/день, а тут - 1500.
+    # Ініціалізуємо стандартні моделі без підстраховки
+    tarot_model = SafeGeminiModel(
+        primary_name=settings.primary_model_name,
+        fallback_name=settings.fallback_model_name,
+        system_instruction=KARMA_SYSTEM_PROMPT
+    )
+
+    advice_model = SafeGeminiModel(
+        primary_name=settings.primary_model_name,
+        fallback_name=settings.fallback_model_name,
+        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT
+    )
+
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+
+    dp = Dispatcher(storage=MemoryStorage())
+
+    # 👇 ДОДАЙ ЦІ ДВА РЯДКИ:
+    # Вмикаємо ліміт 3 секунди на текстові повідомлення та кліки по кнопках
+    dp.message.middleware(ThrottlingMiddleware(rate_limit=3.0))
+    dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=3.0))
+
+    # Передаємо моделі в хендлери
+    dp.workflow_data.update(db=db, tarot_model=tarot_model, advice_model=advice_model)
+
+    dp.include_router(payment_router)
+    dp.include_router(start_router)
+    dp.include_router(tarot_router)
+    dp.include_router(advice_router)
+
+    # Запуск веб-сервера для UptimeRobot
+    port = int(os.environ.get("PORT", 8080))
+    # Запускаємо сервер в фоні (task), щоб не блокувати бота
+    web_task = asyncio.create_task(_run_web_server(port))
+    logging.info(f"🌍 Web server started on port {port}")
+
+    # 👇 ДОДАЄМО ПЛАНУВАЛЬНИК 👇
+    scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
+    # Налаштовуємо запуск щодня о 12:00 (за Києвом)
+    scheduler.add_job(send_daily_reminders, trigger='cron', hour=12, minute=0, args=[bot, db])
+    # НОВА ЗАДАЧА: Ранковий іронічний гороскоп (о 09:00 щодня)
+    scheduler.add_job(send_daily_horoscope, trigger='cron', hour=9, minute=0, args=[bot, db, tarot_model])
+    scheduler.start()
+    logging.info("⏰ Планувальник завдань запущено.")
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        web_task.cancel()
+        await asyncio.gather(web_task, return_exceptions=True)
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)
