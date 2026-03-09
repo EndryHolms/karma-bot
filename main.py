@@ -114,7 +114,7 @@ async def main() -> None:
     # Налаштовуємо запуск щодня о 12:00 (за Києвом)
     scheduler.add_job(send_daily_reminders, trigger='cron', hour=12, minute=0, args=[bot, db])
     # НОВА ЗАДАЧА: Ранковий іронічний гороскоп (о 09:00 щодня)
-    scheduler.add_job(send_daily_horoscope, trigger='cron', hour=4, minute=50, args=[bot, db, tarot_model])
+    scheduler.add_job(send_daily_horoscope, trigger='cron', hour=9, minute=0, args=[bot, db, tarot_model])
     scheduler.start()
     logging.info("⏰ Планувальник завдань запущено.")
 
