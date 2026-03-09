@@ -27,7 +27,7 @@ CAREER_PRICE = 1
 _admin_env = os.getenv("ADMIN_IDS", "469764985") 
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
 
-FOOTER_TEXT = "\n\n💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. Обери тему нижче 👇</i>"
+
 
 # Картинки
 IMG_DAILY = "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png"
@@ -69,15 +69,18 @@ async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: byte
     return await asyncio.to_thread(_call_sync)
 
 async def _send_long(message: Message, text: str, reply_markup: Any = None) -> None:
-    final_text = text + FOOTER_TEXT
+    # 1. Відправляємо сам текст розкладу (без кнопок)
     limit = 4000
-    chunks = [final_text[i : i + limit] for i in range(0, len(final_text), limit)]
-    for i, chunk in enumerate(chunks):
-        is_last = (i == len(chunks) - 1)
-        if is_last:
-            await message.answer(chunk, reply_markup=reply_markup)
-        else:
-            await message.answer(chunk)
+    chunks = [text[i : i + limit] for i in range(0, len(text), limit)]
+    for chunk in chunks:
+        await message.answer(chunk)
+        
+    # 2. Відправляємо клавіатуру ОКРЕМИМ повідомленням!
+    if reply_markup:
+        await message.answer(
+            "💫 <i>Відчуваєш, що це не все? Карти готові відкрити більше. Обери тему нижче 👇</i>", 
+            reply_markup=reply_markup
+        )
 
 # --- HANDLERS ---
 

@@ -109,7 +109,12 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
         await state.clear()
         return
 
-    # Відправка картинки та тексту
+   # Відправка картинки та тексту
     await message.answer_photo(photo=IMG_ADVICE, caption="✨ <i>Відповідь Всесвіту:</i>")
-    await message.answer(text, reply_markup=main_menu_kb())
+    
+    # Відправляємо текст поради окремо
+    await message.answer(text)
+    
+    # Відправляємо меню окремим повідомленням
+    await message.answer("💫 <i>Відчуваєш, що це не все? Обери наступну дію 👇</i>", reply_markup=main_menu_kb())
     await state.clear()
