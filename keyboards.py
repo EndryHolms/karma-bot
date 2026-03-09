@@ -48,31 +48,27 @@ def broadcast_horoscope_kb() -> InlineKeyboardMarkup:
     return kb
 
 def zodiac_selection_kb() -> InlineKeyboardMarkup:
-    """Клавіатура вибору знаку зодіаку (2 колонки для кращого UX)"""
+    """Клавіатура вибору знаку зодіаку (з візуальним вирівнюванням у 3 колонки)"""
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="♈ Овен", callback_data="set_zodiac:aries"),
-            InlineKeyboardButton(text="♉ Телець", callback_data="set_zodiac:taurus")
+            InlineKeyboardButton(text="♈ Овен⠀⠀⠀", callback_data="set_zodiac:aries"),
+            InlineKeyboardButton(text="♉ Телець⠀", callback_data="set_zodiac:taurus"),
+            InlineKeyboardButton(text="♊ Близн.⠀", callback_data="set_zodiac:gemini")
         ],
         [
-            InlineKeyboardButton(text="♊ Близнюки", callback_data="set_zodiac:gemini"),
-            InlineKeyboardButton(text="♋ Рак", callback_data="set_zodiac:cancer")
+            InlineKeyboardButton(text="♋ Рак⠀⠀⠀⠀", callback_data="set_zodiac:cancer"),
+            InlineKeyboardButton(text="♌ Лев⠀⠀⠀⠀", callback_data="set_zodiac:leo"),
+            InlineKeyboardButton(text="♍ Діва⠀⠀⠀", callback_data="set_zodiac:virgo")
         ],
         [
-            InlineKeyboardButton(text="♌ Лев", callback_data="set_zodiac:leo"),
-            InlineKeyboardButton(text="♍ Діва", callback_data="set_zodiac:virgo")
+            InlineKeyboardButton(text="♎ Терези⠀", callback_data="set_zodiac:libra"),
+            InlineKeyboardButton(text="♏ Скорп.⠀", callback_data="set_zodiac:scorpio"),
+            InlineKeyboardButton(text="♐ Стріл.⠀", callback_data="set_zodiac:sagittarius")
         ],
         [
-            InlineKeyboardButton(text="♎ Терези", callback_data="set_zodiac:libra"),
-            InlineKeyboardButton(text="♏ Скорпіон", callback_data="set_zodiac:scorpio")
-        ],
-        [
-            InlineKeyboardButton(text="♐ Стрілець", callback_data="set_zodiac:sagittarius"),
-            InlineKeyboardButton(text="♑ Козеріг", callback_data="set_zodiac:capricorn")
-        ],
-        [
+            InlineKeyboardButton(text="♑ Козеріг", callback_data="set_zodiac:capricorn"),
             InlineKeyboardButton(text="♒ Водолій", callback_data="set_zodiac:aquarius"),
-            InlineKeyboardButton(text="♓ Риби", callback_data="set_zodiac:pisces")
+            InlineKeyboardButton(text="♓ Риби⠀⠀⠀", callback_data="set_zodiac:pisces")
         ],
         [InlineKeyboardButton(text="🌌 Надсилати усі знаки", callback_data="set_zodiac:all")],
         [InlineKeyboardButton(text="🔙 Назад до профілю", callback_data="profile_balance")]
