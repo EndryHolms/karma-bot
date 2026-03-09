@@ -19,8 +19,6 @@ LEXICON = {
         "not_enough_stars": "❌ <b>Недостатньо зірок!</b>\nПотрібно: {cost} ⭐️\nУ тебе: {balance} ⭐️",
         "error_generate": "Вибач, енергетичні потоки зараз нестабільні. Спробуй ще раз пізніше.",
         "more_action_btn": "💫 Відчуваєш, що це не все? Обери наступну дію 👇",
-        
-        # 👇 НОВІ ТЕКСТИ ДЛЯ ІНТЕРАКТИВНИХ ПОРАД 👇
         "invoice_advice_title": "Порада Всесвіту 🧘",
         "invoice_advice_desc": "Коротка мудрість або відповідь на чітке запитання.",
         "error_payment": "Недостатньо ⭐ для оплати.",
@@ -28,7 +26,26 @@ LEXICON = {
         "default_advice_request": "Загальна порада",
         "refund_note": "Твої <b>{price} ⭐️ автоматично повернуто</b>.",
         "universe_silent": "Вибач, Всесвіт зараз мовчить.",
-        "universe_answer": "✨ <i>Відповідь Всесвіту:</i>"
+        "universe_answer": "✨ <i>Відповідь Всесвіту:</i>",
+        
+        # 👇 НОВІ ТЕКСТИ ДЛЯ ТАРО 👇
+        "daily_already_opened": "Твоя карта на сьогодні вже відкрита!",
+        "loading_daily_1": "🔮 <i>Запитую карту дня...</i>",
+        "loading_daily_2": "🧘 <i>Налаштовуюся на твої вібрації...</i>",
+        "loading_daily_3": "🎴 <i>Тасую колоду...</i>",
+        "daily_energy_here": "✨ <i>Енергія дня вже тут...</i>",
+        "invoice_love_title": "Любов та Стосунки ❤️",
+        "invoice_love_desc": "Аналіз почуттів, думок партнера та майбутнього.",
+        "invoice_career_title": "Гроші та Реалізація 💰",
+        "invoice_career_desc": "Аналіз фінансів, кар'єрного росту та проектів.",
+        "ask_love_context": "Зосередься на людині. Напиши її ім'я та коротко опиши, що відбувається між вами зараз.",
+        "ask_career_context": "Опиши свою робочу ситуацію або проект, який тебе турбує.",
+        "ask_general_context": "Опиши свою ситуацію (текстом або голосом)...",
+        "loading_cards": "🔮 <i>Розкладаю карти...</i>",
+        "loading_love_cards": "<i>Karma розкладає карти на: Ваші почуття, Приховані думки, Майбутнє...</i>",
+        "cards_on_table": "✨ <i>Карти лягли на стіл...</i>",
+        "magic_interrupted": "🌪 <i>Магічний ефір раптово перервався... Карти не захотіли говорити.</i>\n\nНе хвилюйся. {refund_note} Спробуй запитати ще раз за кілька хвилин.",
+        "refund_note_balance": "Твої <b>{price} ⭐️ автоматично повернуто</b> на баланс."
     },
     "en": {
         "menu_daily": "✨ Card of the Day (Free)",
@@ -48,8 +65,6 @@ LEXICON = {
         "not_enough_stars": "❌ <b>Not enough stars!</b>\nNeeded: {cost} ⭐️\nYou have: {balance} ⭐️",
         "error_generate": "Sorry, energy flows are unstable right now. Try again later.",
         "more_action_btn": "💫 Feel like this isn't everything? Choose your next action 👇",
-        
-        # 👇 НОВІ ТЕКСТИ ДЛЯ ІНТЕРАКТИВНИХ ПОРАД 👇
         "invoice_advice_title": "Universe Advice 🧘",
         "invoice_advice_desc": "Short wisdom or an answer to a specific question.",
         "error_payment": "Not enough ⭐ to pay.",
@@ -57,7 +72,26 @@ LEXICON = {
         "default_advice_request": "General advice",
         "refund_note": "Your <b>{price} ⭐️ have been automatically refunded</b>.",
         "universe_silent": "Sorry, the Universe is silent right now.",
-        "universe_answer": "✨ <i>Universe's Answer:</i>"
+        "universe_answer": "✨ <i>Universe's Answer:</i>",
+        
+        # 👇 НОВІ ТЕКСТИ ДЛЯ ТАРО 👇
+        "daily_already_opened": "Your card for today is already open!",
+        "loading_daily_1": "🔮 <i>Asking for the card of the day...</i>",
+        "loading_daily_2": "🧘 <i>Tuning into your vibrations...</i>",
+        "loading_daily_3": "🎴 <i>Shuffling the deck...</i>",
+        "daily_energy_here": "✨ <i>The energy of the day is here...</i>",
+        "invoice_love_title": "Love & Relationships ❤️",
+        "invoice_love_desc": "Analysis of feelings, partner's thoughts, and future.",
+        "invoice_career_title": "Career & Finances 💰",
+        "invoice_career_desc": "Analysis of finances, career growth, and projects.",
+        "ask_love_context": "Focus on the person. Write their name and briefly describe what is happening between you right now.",
+        "ask_career_context": "Describe your work situation or project that concerns you.",
+        "ask_general_context": "Describe your situation (by text or voice)...",
+        "loading_cards": "🔮 <i>Laying out the cards...</i>",
+        "loading_love_cards": "<i>Karma is laying out the cards for: Your feelings, Hidden thoughts, Future...</i>",
+        "cards_on_table": "✨ <i>The cards are on the table...</i>",
+        "magic_interrupted": "🌪 <i>The magical ether was suddenly interrupted... The cards refused to speak.</i>\n\nDon't worry. {refund_note} Try asking again in a few minutes.",
+        "refund_note_balance": "Your <b>{price} ⭐️ have been automatically refunded</b> to your balance."
     },
     "ru": {
         "menu_daily": "✨ Карта дня (Бесплатно)",
@@ -77,8 +111,6 @@ LEXICON = {
         "not_enough_stars": "❌ <b>Недостаточно звезд!</b>\nНужно: {cost} ⭐️\nУ тебя: {balance} ⭐️",
         "error_generate": "Извини, энергетические потоки сейчас нестабильны. Попробуй позже.",
         "more_action_btn": "💫 Чувствуешь, что это не всё? Выбери следующее действие 👇",
-        
-        # 👇 НОВІ ТЕКСТИ ДЛЯ ІНТЕРАКТИВНИХ ПОРАД 👇
         "invoice_advice_title": "Совет Вселенной 🧘",
         "invoice_advice_desc": "Короткая мудрость или ответ на четкий вопрос.",
         "error_payment": "Недостаточно ⭐ для оплаты.",
@@ -86,7 +118,26 @@ LEXICON = {
         "default_advice_request": "Общий совет",
         "refund_note": "Твои <b>{price} ⭐️ автоматически возвращены</b>.",
         "universe_silent": "Извини, Вселенная сейчас молчит.",
-        "universe_answer": "✨ <i>Ответ Вселенной:</i>"
+        "universe_answer": "✨ <i>Ответ Вселенной:</i>",
+        
+        # 👇 НОВІ ТЕКСТИ ДЛЯ ТАРО 👇
+        "daily_already_opened": "Твоя карта на сегодня уже открыта!",
+        "loading_daily_1": "🔮 <i>Спрашиваю карту дня...</i>",
+        "loading_daily_2": "🧘 <i>Настраиваюсь на твои вибрации...</i>",
+        "loading_daily_3": "🎴 <i>Тасую колоду...</i>",
+        "daily_energy_here": "✨ <i>Энергия дня уже здесь...</i>",
+        "invoice_love_title": "Любовь и Отношения ❤️",
+        "invoice_love_desc": "Анализ чувств, мыслей партнера и будущего.",
+        "invoice_career_title": "Деньги и Реализация 💰",
+        "invoice_career_desc": "Анализ финансов, карьерного роста и проектов.",
+        "ask_love_context": "Сосредоточься на человеке. Напиши его имя и кратко опиши, что происходит между вами сейчас.",
+        "ask_career_context": "Опиши свою рабочую ситуацию или проект, который тебя беспокоит.",
+        "ask_general_context": "Опиши свою ситуацию (текстом или голосом)...",
+        "loading_cards": "🔮 <i>Раскладываю карты...</i>",
+        "loading_love_cards": "<i>Karma раскладывает карты на: Ваши чувства, Скрытые мысли, Будущее...</i>",
+        "cards_on_table": "✨ <i>Карты легли на стол...</i>",
+        "magic_interrupted": "🌪 <i>Магический эфир внезапно прервался... Карты не захотели говорить.</i>\n\nНе волнуйся. {refund_note} Попробуй спросить еще раз через несколько минут.",
+        "refund_note_balance": "Твои <b>{price} ⭐️ автоматически возвращены</b> на баланс."
     }
 }
 
