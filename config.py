@@ -19,7 +19,7 @@ def load_settings() -> Settings:
     bot_token = os.getenv("BOT_TOKEN", "").strip()
     gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
     firebase_cred_path = os.getenv("FIREBASE_CRED_PATH", "").strip()
-    primary_model_name = os.getenv("PRIMARY_MODEL_NAME", "gemini-1.5-flash").strip()
+    primary_model_name = os.getenv("PRIMARY_MODEL_NAME", "gemini-3.1-flash-lite-preview").strip()
     fallback_model_name = os.getenv("FALLBACK_MODEL_NAME", "gemini-1.5-pro").strip()
 
     missing = [
