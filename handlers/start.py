@@ -51,8 +51,10 @@ async def process_language_selection(callback: CallbackQuery, db: firestore.Clie
     
     # Видаляємо повідомлення з вибором мови і показуємо головне меню!
     await callback.message.delete()
+    
+    # ВАЖЛИВО: цей блок має бути на одному рівні з попередніми рядками
     await callback.message.answer(
-        "✨", # Тут пізніше зробимо гарне привітання різними мовами
+        get_text(lang, "welcome_text"),
         reply_markup=main_menu_kb(lang)
     )
 
@@ -127,7 +129,7 @@ async def process_zodiac_selection(callback: CallbackQuery, db: firestore.Client
     
     zodiac_name = ZODIACS.get(zodiac_key, "🌌 Усі знаки")
     
-   await callback.message.answer(
+    await callback.message.answer(
         get_text(lang, "welcome_text"),
         reply_markup=main_menu_kb(lang)
     )
