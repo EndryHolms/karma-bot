@@ -20,7 +20,14 @@ WELCOME_IMAGE_URL = "https://i.postimg.cc/7hWHVtr6/Gemini-Generated-Image-y1ell9
 @router.message(CommandStart())
 async def command_start(message: Message, db: firestore.Client) -> None:
     if not message.from_user: return
-    await ensure_user(db, message.from_user.id, message.from_user.username or "", message.from_user.first_name or "")
+    
+    # 👇 ТУТ ВИПРАВЛЕНО: додано user_id=, username=, first_name=
+    await ensure_user(
+        db, 
+        user_id=message.from_user.id, 
+        username=message.from_user.username or "", 
+        first_name=message.from_user.first_name or ""
+    )
     
     # Завжди при старті пропонуємо обрати мову (текст беремо одразу трьома мовами)
     await message.answer(
