@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+﻿from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from lexicon import get_text
 
@@ -10,16 +10,6 @@ CB_PROFILE = "menu:profile"
 CB_BACK_MENU = "menu:back"
 CB_CHANGE_ZODIAC = "change_zodiac"
 CB_SHARE_HOROSCOPE = "horoscope:share"
-
-_SHARE_HOROSCOPE_TEXT = {
-    "uk": "📤 Поділитися з друзями",
-    "en": "📤 Share with friends",
-    "ru": "📤 Поделиться с друзьями",
-}
-
-
-def _share_text(lang: str) -> str:
-    return _SHARE_HOROSCOPE_TEXT.get(lang, _SHARE_HOROSCOPE_TEXT["uk"])
 
 
 def language_selection_kb() -> InlineKeyboardMarkup:
@@ -53,16 +43,7 @@ def back_to_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
 
 
 def horoscope_share_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=_share_text(lang), callback_data=CB_SHARE_HOROSCOPE)],
-            [InlineKeyboardButton(text=get_text(lang, "menu_daily"), callback_data=CB_DAILY)],
-            [InlineKeyboardButton(text=get_text(lang, "menu_love"), callback_data=CB_RELATIONSHIP)],
-            [InlineKeyboardButton(text=get_text(lang, "menu_career"), callback_data=CB_CAREER)],
-            [InlineKeyboardButton(text=get_text(lang, "menu_advice"), callback_data=CB_ADVICE)],
-            [InlineKeyboardButton(text=get_text(lang, "menu_profile"), callback_data=CB_PROFILE)],
-        ]
-    )
+    return main_menu_kb(lang)
 
 
 def zodiac_selection_kb(lang: str = "uk") -> InlineKeyboardMarkup:

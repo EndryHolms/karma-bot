@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import os
@@ -179,8 +179,14 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
         return
 
     current_img = IMAGES_ADVICE.get(lang, IMAGES_ADVICE["uk"])
-    await message.answer_photo(photo=current_img, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
+    await message.answer_photo(photo=current_img)
 
-    await message.answer(text, parse_mode="HTML")
-    await message.answer(get_text(lang, "more_action_btn"), reply_markup=main_menu_kb(lang), parse_mode="HTML")
+    content_text = f"{get_text(lang, 'universe_answer')}\n\n{text}"
+    await message.answer(
+        content_text,
+        reply_markup=main_menu_kb(lang),
+        parse_mode="HTML",
+    )
     await state.clear()
+
+

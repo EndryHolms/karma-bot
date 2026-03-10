@@ -11,7 +11,6 @@ from keyboards import (
     CB_BACK_MENU,
     CB_CHANGE_ZODIAC,
     CB_PROFILE,
-    CB_SHARE_HOROSCOPE,
     language_selection_kb,
     main_menu_kb,
     zodiac_selection_kb,
@@ -22,24 +21,6 @@ router = Router()
 
 CB_INVITE_FRIEND = "profile:invite"
 CB_CHANGE_LANGUAGE = "profile:language"
-
-_SHARE_EMPTY = {
-    "uk": "Поки ще немає гороскопу для поширення.",
-    "en": "There is no horoscope to share yet.",
-    "ru": "Пока еще нет гороскопа для пересылки.",
-}
-
-_SHARE_READY = {
-    "uk": "Готово! Надсилаю текст для пересилання.",
-    "en": "Done. Sending a ready-to-forward message.",
-    "ru": "Готово! Отправляю текст для пересылки.",
-}
-
-_SHARE_FOOTER = {
-    "uk": "✨ <i>Перешли це повідомлення друзям.</i>",
-    "en": "✨ <i>Forward this message to your friends.</i>",
-    "ru": "✨ <i>Перешли это сообщение друзьям.</i>",
-}
 
 _PROFILE_TEXT = {
     "uk": (
@@ -387,23 +368,5 @@ async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> N
     await profile(callback, db)
 
 
-@router.callback_query(F.data == CB_SHARE_HOROSCOPE)
-async def share_horoscope(callback: CallbackQuery, db: firestore.Client) -> None:
-    if not callback.from_user or not callback.message:
-        return
 
-    user_id = str(callback.from_user.id)
-    doc = db.collection("users").document(user_id).get()
-    user_data = doc.to_dict() or {}
-    lang = user_data.get("language", "uk")
-    share_text = user_data.get("last_horoscope_share_text", "").strip()
 
-    if not share_text:
-        await callback.answer(_localized(_SHARE_EMPTY, lang), show_alert=True)
-        return
-
-    await callback.answer(_localized(_SHARE_READY, lang))
-    await callback.message.answer(
-        f"{share_text}\n\n{_localized(_SHARE_FOOTER, lang)}",
-        parse_mode="HTML",
-    )

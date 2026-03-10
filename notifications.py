@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 from datetime import datetime
 
@@ -7,7 +7,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError
 from firebase_admin import firestore
 
-from keyboards import horoscope_share_menu_kb, main_menu_kb
+from keyboards import main_menu_kb
 
 _MONTHLY_REMINDER_TEXT = {
     "uk": "✨ <i>Всесвіт давно не чув твого запиту...</i>\n\nТи вже колись відкривав свою Карту Дня, але давно не повертався. Можливо, зараз саме час знову подивитися, які енергії тебе супроводжують 👇",
@@ -25,6 +25,12 @@ _HOROSCOPE_FOLLOWUP = {
     "uk": "💫 <i>Що підказує твоя інтуїція далі?</i> 👇",
     "en": "💫 <i>What is your intuition telling you to do next?</i> 👇",
     "ru": "💫 <i>Что подсказывает твоя интуиция дальше?</i> 👇",
+}
+
+_HOROSCOPE_SOURCE = {
+    "uk": "✨ <i>Більше підказок у Karma:</i> {link}",
+    "en": "✨ <i>More guidance in Karma:</i> {link}",
+    "ru": "✨ <i>Больше подсказок в Karma:</i> {link}",
 }
 
 
@@ -84,7 +90,6 @@ async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
 
         if not last_daily_card_date:
             continue
-
         if last_reminder_month == month_key:
             continue
 
@@ -104,8 +109,8 @@ async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
             await asyncio.sleep(0.1)
         except TelegramForbiddenError:
             pass
-        except Exception as e:
-            logging.error("Monthly reminder send failed for %s: %s", user_id, e)
+        except Exception as exc:
+            logging.error("Monthly reminder send failed for %s: %s", user_id, exc)
 
     logging.info("Monthly card reminders sent to %s users", count)
 
@@ -119,7 +124,8 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     today_key = now.strftime("%Y-%m-%d")
 
     prompt = (
-        "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку (по одному короткому реченню). "
+        "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку "
+        "(по одному короткому реченню). "
         "Стиль: сарказм, іронія від роботи, жарти про гроші, погоду та стосунки. "
         "СУВОРА УМОВА: Жодного тексту до чи після знаків. Без вступів, без висновків, без зірочок Markdown. "
         "Тільки 12 рядків. Обов'язково роби порожній рядок (Enter) між знаками. "
@@ -132,12 +138,15 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     try:
         response = await asyncio.to_thread(tarot_model.generate_content, prompt)
         raw_text = getattr(response, "text", "").strip()
-    except Exception as e:
-        logging.error("Horoscope generation failed: %s", e)
+    except Exception as exc:
+        logging.error("Horoscope generation failed: %s", exc)
         return
 
     if not raw_text:
         return
+
+    me = await bot.get_me()
+    bot_link = f"https://t.me/{me.username}" if me.username else None
 
     signs_mapping = {
         "aries": "Овен",
@@ -175,6 +184,8 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
         text_to_send = user_horoscopes.get(zodiac_pref, user_horoscopes["all"])
         title = _localized(_HOROSCOPE_TITLE, lang).format(date=today_date)
         final_message = f"{title}\n\n{text_to_send}"
+        if bot_link:
+            final_message = f"{final_message}\n\n{_localized(_HOROSCOPE_SOURCE, lang).format(link=bot_link)}"
 
         try:
             await bot.send_message(chat_id=user_id, text=final_message, parse_mode="HTML")
@@ -182,12 +193,12 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
             await bot.send_message(
                 chat_id=user_id,
                 text=_localized(_HOROSCOPE_FOLLOWUP, lang),
-                reply_markup=horoscope_share_menu_kb(lang),
+                reply_markup=main_menu_kb(lang),
                 parse_mode="HTML",
             )
             count += 1
             await asyncio.sleep(0.1)
-        except Exception as e:
-            logging.error("Horoscope send failed for %s: %s", user_id, e)
+        except Exception as exc:
+            logging.error("Horoscope send failed for %s: %s", user_id, exc)
 
     logging.info("Daily horoscope sent to %s users", count)
