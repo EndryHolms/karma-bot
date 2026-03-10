@@ -53,9 +53,34 @@ IMAGES_CAREER = {
     "ru": "https://i.postimg.cc/rmN2SJxQ/b_A_richly_detailed_Ta_3_ru.png",
 }
 
+HEADING_GUIDE = {
+    "uk": {
+        "cards": "Карти",
+        "reading": "Твій розклад",
+        "advice": "Порада від Karma",
+        "affirmation": "Афірмація",
+    },
+    "en": {
+        "cards": "Cards",
+        "reading": "Your reading",
+        "advice": "Advice from Karma",
+        "affirmation": "Affirmation",
+    },
+    "ru": {
+        "cards": "Карты",
+        "reading": "Твой расклад",
+        "advice": "Совет от Karma",
+        "affirmation": "Аффирмация",
+    },
+}
+
 
 class ReadingStates(StatesGroup):
     waiting_for_context = State()
+
+
+def _heading_guide(lang: str) -> dict[str, str]:
+    return HEADING_GUIDE.get(lang, HEADING_GUIDE["uk"])
 
 
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
@@ -190,7 +215,16 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
-    prompt = f"Р’итягни для мене карту дня і поясни енергію цього дня. Виділи афірмацію жирним курсивом і додай смайлик ✨.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
+    headings = _heading_guide(lang)
+    prompt = (
+        f"Draw a card of the day and explain the energy of this day. "
+        f"Write the entire response only in {target_language}. "
+        f"Do not mix languages. Use Telegram HTML only. Do not use Markdown. "
+        f"Structure the answer exactly with these headings in {target_language}: "
+        f"<b>{headings['cards']}:</b>, <b>{headings['reading']}:</b>, "
+        f"<b>{headings['advice']}:</b>, <b>{headings['affirmation']}:</b>. "
+        f"The affirmation must be uplifting and also fully in {target_language}."
+    )
 
     ai_task = asyncio.create_task(_gemini_generate_text(tarot_model, prompt))
 
@@ -256,23 +290,41 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
     reading_key = data.get("reading_key")
     price = data.get("price", 1)
 
-    topic = "стосунки" if reading_key == "relationship" else "кар'єра"
+    topic_by_lang = {
+        "uk": {"relationship": "стосунки", "career": "кар'єра"},
+        "en": {"relationship": "relationships", "career": "career"},
+        "ru": {"relationship": "отношения", "career": "карьера"},
+    }
+    topic = topic_by_lang.get(lang, topic_by_lang["uk"]).get(reading_key, topic_by_lang["uk"]["career"])
     wait_text = get_text(lang, "loading_love_cards") if reading_key == "relationship" else get_text(lang, "loading_cards")
     msg = await message.answer(wait_text, reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
 
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
+    headings = _heading_guide(lang)
 
     text = ""
     try:
         if message.voice:
             file_info = await bot.get_file(message.voice.file_id)
             audio_bytes = (await bot.download_file(file_info.file_path)).read()
-            prompt = f"Контекст про {topic} (голос). Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
+            prompt = (
+                f"The user sent voice context about {topic}. Create a tarot reading. "
+                f"Write the entire response only in {target_language}. Do not mix languages. "
+                f"Use Telegram HTML only. Use these headings: "
+                f"<b>{headings['cards']}:</b>, <b>{headings['reading']}:</b>, "
+                f"<b>{headings['advice']}:</b>, <b>{headings['affirmation']}:</b>."
+            )
             text = await _gemini_generate_with_audio(tarot_model, prompt, audio_bytes)
         else:
             user_text = message.text or ""
-            prompt = f"Контекст про {topic}: {user_text}. Зроби розклад.\n\nIMPORTANT: You MUST write your ENTIRE response (including ALL structured headings like 'Порада від Karma', 'Афірмація', 'Карти', 'Твій розклад') exclusively in {target_language} language!"
+            prompt = (
+                f"The user context about {topic} is: {user_text}. Create a tarot reading. "
+                f"Write the entire response only in {target_language}. Do not mix languages. "
+                f"Use Telegram HTML only. Use these headings: "
+                f"<b>{headings['cards']}:</b>, <b>{headings['reading']}:</b>, "
+                f"<b>{headings['advice']}:</b>, <b>{headings['affirmation']}:</b>."
+            )
             text = await _gemini_generate_text(tarot_model, prompt)
     except Exception as e:
         print(f"Reading Context Error: {e}")
