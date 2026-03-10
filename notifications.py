@@ -32,8 +32,21 @@ def _localized(mapping: dict[str, str], lang: str) -> str:
     return mapping.get(lang, mapping["uk"])
 
 
+async def _store_share_text(db: firestore.Client, user_id: str, text: str, date_key: str) -> None:
+    def _write_sync() -> None:
+        db.collection("users").document(user_id).set(
+            {
+                "last_horoscope_share_text": text,
+                "last_horoscope_share_date": date_key,
+            },
+            merge=True,
+        )
+
+    await asyncio.to_thread(_write_sync)
+
+
 async def send_daily_reminders(bot: Bot, db: firestore.Client):
-    logging.info("РџРѕС‡РёРЅР°СЋ СЂРѕР·СЃРёР»РєСѓ РЅР°РіР°РґСѓРІР°РЅСЊ...")
+    logging.info("Starting daily reminders broadcast")
     today_str = datetime.now().strftime("%Y-%m-%d")
     users_ref = db.collection("users").stream()
 
@@ -57,23 +70,25 @@ async def send_daily_reminders(bot: Bot, db: firestore.Client):
             except TelegramForbiddenError:
                 pass
             except Exception as e:
-                logging.error(f"РџРѕРјРёР»РєР° СЂРѕР·СЃРёР»РєРё РґР»СЏ {user_id}: {e}")
+                logging.error("Reminder send failed for %s: %s", user_id, e)
 
-    logging.info(f"РќР°РіР°РґСѓРІР°РЅРЅСЏ СѓСЃРїС–С€РЅРѕ РЅР°РґС–СЃР»Р°РЅРѕ {count} РєРѕСЂРёСЃС‚СѓРІР°С‡Р°Рј.")
+    logging.info("Daily reminders sent to %s users", count)
 
 
 async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
-    logging.info("РџРѕС‡РёРЅР°СЋ РіРµРЅРµСЂР°С†С–СЋ С‚Р° СЂРѕР·СЃРёР»РєСѓ РіРѕСЂРѕСЃРєРѕРїС–РІ...")
+    logging.info("Starting daily horoscope generation and broadcast")
 
     tz = pytz.timezone("Europe/Kyiv")
-    today_date = datetime.now(tz).strftime("%d.%m")
+    now = datetime.now(tz)
+    today_date = now.strftime("%d.%m")
+    today_key = now.strftime("%Y-%m-%d")
 
     prompt = (
-        "РќР°РїРёС€Рё С–СЂРѕРЅС–С‡РЅРёР№, РєСѓРјРµРґРЅРёР№ С‚Р° РґСѓР¶Рµ Р¶РёС‚С‚С”РІРёР№ РіРѕСЂРѕСЃРєРѕРї РЅР° СЃСЊРѕРіРѕРґРЅС– РґР»СЏ РІСЃС–С… 12 Р·РЅР°РєС–РІ Р·РѕРґС–Р°РєСѓ (РїРѕ РѕРґРЅРѕРјСѓ РєРѕСЂРѕС‚РєРѕРјСѓ СЂРµС‡РµРЅРЅСЋ). "
-        "РЎС‚РёР»СЊ: СЃР°СЂРєР°Р·Рј, РІС‚РѕРјР° РІС–Рґ СЂРѕР±РѕС‚Рё, Р¶Р°СЂС‚Рё РїСЂРѕ РіСЂРѕС€С–, РїРѕРіРѕРґСѓ С‚Р° СЃС‚РѕСЃСѓРЅРєРё. "
-        "РЎРЈР’РћР Рђ РЈРњРћР’Рђ: Р–РѕРґРЅРѕРіРѕ С‚РµРєСЃС‚Сѓ РґРѕ С‡Рё РїС–СЃР»СЏ Р·РЅР°РєС–РІ! Р‘РµР· РІСЃС‚СѓРїС–РІ, Р±РµР· РІРёСЃРЅРѕРІРєС–РІ, Р±РµР· Р·С–СЂРѕС‡РѕРє Markdown. "
-        "РўС–Р»СЊРєРё 12 СЂСЏРґРєС–РІ. РћР±РѕРІ'СЏР·РєРѕРІРѕ СЂРѕР±Рё РїРѕСЂРѕР¶РЅС–Р№ СЂСЏРґРѕРє (Enter) РјС–Р¶ Р·РЅР°РєР°РјРё. "
-        "Р¤РѕСЂРјР°С‚ РјР°С” Р±СѓС‚Рё С‚РѕС‡РЅРѕ С‚Р°РєРёРј:\n"
+        "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку (по одному короткому реченню). "
+        "Стиль: сарказм, іронія від роботи, жарти про гроші, погоду та стосунки. "
+        "СУВОРА УМОВА: Жодного тексту до чи після знаків. Без вступів, без висновків, без зірочок Markdown. "
+        "Тільки 12 рядків. Обов'язково роби порожній рядок (Enter) між знаками. "
+        "Формат має бути точно таким:\n"
         "♈ Овен - [твій жарт]\n\n"
         "♉ Телець - [твій жарт]\n\n"
         "...і так для всіх 12 знаків."
@@ -83,7 +98,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
         response = await asyncio.to_thread(tarot_model.generate_content, prompt)
         raw_text = getattr(response, "text", "").strip()
     except Exception as e:
-        logging.error(f"РџРѕРјРёР»РєР° РіРµРЅРµСЂР°С†С–С— РіРѕСЂРѕСЃРєРѕРїСѓ: {e}")
+        logging.error("Horoscope generation failed: %s", e)
         return
 
     if not raw_text:
@@ -99,7 +114,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
         "libra": "Терези",
         "scorpio": "Скорпіон",
         "sagittarius": "Стрілець",
-        "capricorn": "Козер",
+        "capricorn": "Козеріг",
         "aquarius": "Водолій",
         "pisces": "Риби",
     }
@@ -128,6 +143,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
 
         try:
             await bot.send_message(chat_id=user_id, text=final_message, parse_mode="HTML")
+            await _store_share_text(db, user_id, final_message, today_key)
             await bot.send_message(
                 chat_id=user_id,
                 text=_localized(_HOROSCOPE_FOLLOWUP, lang),
@@ -136,7 +152,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
             )
             count += 1
             await asyncio.sleep(0.1)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error("Horoscope send failed for %s: %s", user_id, e)
 
-    logging.info(f"Р“РѕСЂРѕСЃРєРѕРї СѓСЃРїС–С€РЅРѕ РЅР°РґС–СЃР»Р°РЅРѕ {count} РєРѕСЂРёСЃС‚СѓРІР°С‡Р°Рј.")
+    logging.info("Daily horoscope sent to %s users", count)
