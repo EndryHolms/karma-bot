@@ -2,24 +2,24 @@ import asyncio
 import logging
 import os
 import sys
+
 import google.generativeai as genai
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from google.generativeai.types import HarmBlockThreshold, HarmCategory
 
 from config import load_settings
 from firebase_db import init_firestore
-from middleware import ThrottlingMiddleware
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from notifications import send_daily_reminders, send_daily_horoscope
-
 from handlers.advice import router as advice_router
 from handlers.payment import router as payment_router
 from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
+from middleware import ThrottlingMiddleware
+from notifications import send_daily_horoscope, send_monthly_card_reminders
 from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 SAFETY_SETTINGS = {
@@ -29,8 +29,10 @@ SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
+
 async def health_check(request: web.Request) -> web.Response:
     return web.Response(text="Bot is alive")
+
 
 async def _run_web_server(port: int) -> None:
     app = web.Application()
@@ -39,8 +41,11 @@ async def _run_web_server(port: int) -> None:
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=port)
     await site.start()
-    try: await asyncio.Event().wait()
-    finally: await runner.cleanup()
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()
+
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -49,17 +54,16 @@ async def main() -> None:
 
     genai.configure(api_key=settings.gemini_api_key)
 
-    # 👇 ПЕРЕХОДИМО НА 3.1 FLASH LITE
-    model_name = "gemini-3.1-flash-lite-preview" 
-    
+    model_name = "gemini-3.1-flash-lite-preview"
+
     tarot_model = genai.GenerativeModel(
         model_name=model_name,
-        system_instruction=KARMA_SYSTEM_PROMPT
+        system_instruction=KARMA_SYSTEM_PROMPT,
     )
 
     advice_model = genai.GenerativeModel(
         model_name=model_name,
-        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT
+        system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
     )
 
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -67,12 +71,11 @@ async def main() -> None:
 
     dp.update.middleware(ThrottlingMiddleware(rate_limit=3.0))
 
-    # Додаємо safety_settings сюди
     dp.workflow_data.update(
-        db=db, 
-        tarot_model=tarot_model, 
-        advice_model=advice_model, 
-        safety_settings=SAFETY_SETTINGS
+        db=db,
+        tarot_model=tarot_model,
+        advice_model=advice_model,
+        safety_settings=SAFETY_SETTINGS,
     )
 
     dp.include_router(payment_router)
@@ -84,8 +87,8 @@ async def main() -> None:
     web_task = asyncio.create_task(_run_web_server(port))
 
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
-    scheduler.add_job(send_daily_reminders, trigger='cron', hour=12, minute=0, args=[bot, db])
-    scheduler.add_job(send_daily_horoscope, trigger='cron', hour=9, minute=0, args=[bot, db, tarot_model])
+    scheduler.add_job(send_monthly_card_reminders, trigger="cron", day=1, hour=12, minute=0, args=[bot, db])
+    scheduler.add_job(send_daily_horoscope, trigger="cron", hour=9, minute=0, args=[bot, db, tarot_model])
     scheduler.start()
 
     try:
@@ -94,6 +97,9 @@ async def main() -> None:
         web_task.cancel()
         await asyncio.gather(web_task, return_exceptions=True)
 
+
 if __name__ == "__main__":
-    try: asyncio.run(main())
-    except KeyboardInterrupt: sys.exit(0)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)
