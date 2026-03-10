@@ -15,7 +15,15 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from firebase_admin import firestore
 
-from firebase_db import InsufficientBalanceError, ensure_user, get_balance, get_user_language, increment_balance
+from firebase_db import (
+    REFERRAL_DAILY_BONUS,
+    InsufficientBalanceError,
+    ensure_user,
+    get_balance,
+    get_user_language,
+    grant_referral_bonus_for_daily_card,
+    increment_balance,
+)
 from handlers.payment import send_stars_invoice
 from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
@@ -53,12 +61,19 @@ IMAGES_CAREER = {
     "ru": "https://i.postimg.cc/rmN2SJxQ/b_A_richly_detailed_Ta_3_ru.png",
 }
 
+_REFERRAL_BONUS_NOTICE = {
+    "uk": "рџЋЃ <b>Р‘РѕРЅСѓСЃ Р·Р° РґСЂСѓРіР°!</b> РўРІС–Р№ РґСЂСѓРі РІС–РґРєСЂРёРІ СЃРІРѕСЋ РїРµСЂС€Сѓ РљР°СЂС‚Сѓ Р”РЅСЏ, С‚РѕР¶ С‚Рё РѕС‚СЂРёРјР°РІ <b>{bonus} в­ђ</b>.",
+    "en": "рџЋЃ <b>Friend bonus!</b> Your friend opened their first Card of the Day, so you received <b>{bonus} в­ђ</b>.",
+    "ru": "рџЋЃ <b>Р‘РѕРЅСѓСЃ Р·Р° РґСЂСѓРіР°!</b> РўРІРѕР№ РґСЂСѓРі РѕС‚РєСЂС‹Р» СЃРІРѕСЋ РїРµСЂРІСѓСЋ РљР°СЂС‚Сѓ Р”РЅСЏ, РїРѕСЌС‚РѕРјСѓ С‚С‹ РїРѕР»СѓС‡РёР» <b>{bonus} в­ђ</b>.",
+}
+
+
 HEADING_GUIDE = {
     "uk": {
-        "cards": "Карти",
-        "reading": "Твій розклад",
-        "advice": "Порада від Karma",
-        "affirmation": "Афірмація",
+        "cards": "Р С™Р В°РЎР‚РЎвЂљР С‘",
+        "reading": "Р СћР Р†РЎвЂ“Р в„– РЎР‚Р С•Р В·Р С”Р В»Р В°Р Т‘",
+        "advice": "Р СџР С•РЎР‚Р В°Р Т‘Р В° Р Р†РЎвЂ“Р Т‘ Karma",
+        "affirmation": "Р С’РЎвЂћРЎвЂ“РЎР‚Р СР В°РЎвЂ РЎвЂ“РЎРЏ",
     },
     "en": {
         "cards": "Cards",
@@ -67,10 +82,10 @@ HEADING_GUIDE = {
         "affirmation": "Affirmation",
     },
     "ru": {
-        "cards": "Карты",
-        "reading": "Твой расклад",
-        "advice": "Совет от Karma",
-        "affirmation": "Аффирмация",
+        "cards": "Р С™Р В°РЎР‚РЎвЂљРЎвЂ№",
+        "reading": "Р СћР Р†Р С•Р в„– РЎР‚Р В°РЎРѓР С”Р В»Р В°Р Т‘",
+        "advice": "Р РЋР С•Р Р†Р ВµРЎвЂљ Р С•РЎвЂљ Karma",
+        "affirmation": "Р С’РЎвЂћРЎвЂћР С‘РЎР‚Р СР В°РЎвЂ Р С‘РЎРЏ",
     },
 }
 
@@ -90,13 +105,13 @@ def _tarot_format_prompt(lang: str, target_language: str) -> str:
         f"Use Telegram HTML only. Do not use Markdown. "
         f"Keep the emojis exactly as shown. Keep exactly one empty line after each heading and one empty line between blocks. "
         f"Return the answer in exactly this structure:\n\n"
-        f"🎴 <b>{headings['cards']}:</b>\n\n"
+        f"СЂСџР‹Т‘ <b>{headings['cards']}:</b>\n\n"
         f"[text]\n\n"
-        f"👁 <b>{headings['reading']}:</b>\n\n"
+        f"СЂСџвЂРѓ <b>{headings['reading']}:</b>\n\n"
         f"[text]\n\n"
-        f"✨ <b>{headings['advice']}:</b>\n\n"
+        f"РІСљРЃ <b>{headings['advice']}:</b>\n\n"
         f"[text]\n\n"
-        f"🌌 <b>{headings['affirmation']}:</b>\n\n"
+        f"СЂСџРЉРЉ <b>{headings['affirmation']}:</b>\n\n"
         f"[text]\n\n"
         f"The affirmation must also be fully in {target_language}."
     )
@@ -247,10 +262,17 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     await asyncio.sleep(1.5)
     await msg.edit_text(get_text(lang, "loading_daily_3"), parse_mode="HTML")
 
+    referral_bonus_granted_to = None
     try:
         text = await ai_task
         if text:
             db.collection("users").document(user_id).update({"last_daily_card_date": today_str})
+            if not is_admin:
+                referral_bonus_granted_to = await grant_referral_bonus_for_daily_card(
+                    db,
+                    callback.from_user.id,
+                    REFERRAL_DAILY_BONUS,
+                )
 
         await msg.delete()
 
@@ -258,6 +280,16 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
             current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
             await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
             await _send_long(callback.message, text, reply_markup=main_menu_kb(lang), lang=lang)
+
+            if referral_bonus_granted_to:
+                ref_lang = await get_user_language(db, referral_bonus_granted_to)
+                notice = _REFERRAL_BONUS_NOTICE.get(ref_lang, _REFERRAL_BONUS_NOTICE["uk"]).format(
+                    bonus=REFERRAL_DAILY_BONUS
+                )
+                try:
+                    await callback.bot.send_message(referral_bonus_granted_to, notice, parse_mode="HTML")
+                except Exception:
+                    pass
         else:
             await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
     except Exception as e:
@@ -304,9 +336,9 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
     price = data.get("price", 1)
 
     topic_by_lang = {
-        "uk": {"relationship": "стосунки", "career": "кар'єра"},
+        "uk": {"relationship": "РЎРѓРЎвЂљР С•РЎРѓРЎС“Р Р…Р С”Р С‘", "career": "Р С”Р В°РЎР‚'РЎвЂќРЎР‚Р В°"},
         "en": {"relationship": "relationships", "career": "career"},
-        "ru": {"relationship": "отношения", "career": "карьера"},
+        "ru": {"relationship": "Р С•РЎвЂљР Р…Р С•РЎв‚¬Р ВµР Р…Р С‘РЎРЏ", "career": "Р С”Р В°РЎР‚РЎРЉР ВµРЎР‚Р В°"},
     }
     topic = topic_by_lang.get(lang, topic_by_lang["uk"]).get(reading_key, topic_by_lang["uk"]["career"])
     wait_text = get_text(lang, "loading_love_cards") if reading_key == "relationship" else get_text(lang, "loading_cards")

@@ -10,7 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from firebase_admin import firestore
 
-from firebase_db import get_user, get_user_stats, set_balance
+from firebase_db import get_referred_users, get_user, get_user_stats, set_balance
 
 router = Router()
 
@@ -18,6 +18,7 @@ CB_ADMIN_STATS = "admin:stats"
 CB_ADMIN_USER = "admin:user"
 CB_ADMIN_BACK = "admin:back"
 CB_ADMIN_SET_BALANCE = "admin:set_balance"
+CB_ADMIN_REFERRALS = "admin:referrals"
 
 _admin_env = os.getenv("ADMIN_IDS", "469764985")
 ADMIN_IDS = {int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()}
@@ -44,6 +45,7 @@ def _admin_menu_kb() -> InlineKeyboardMarkup:
 def _user_card_kb(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="Запрошені користувачі", callback_data=f"{CB_ADMIN_REFERRALS}:{user_id}")],
             [InlineKeyboardButton(text="Змінити баланс", callback_data=f"{CB_ADMIN_SET_BALANCE}:{user_id}")],
             [InlineKeyboardButton(text="Назад", callback_data=CB_ADMIN_BACK)],
         ]
@@ -53,6 +55,12 @@ def _user_card_kb(user_id: int) -> InlineKeyboardMarkup:
 def _back_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data=CB_ADMIN_BACK)]]
+    )
+
+
+def _user_back_kb(user_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="До користувача", callback_data=f"{CB_ADMIN_REFERRALS}:{user_id}:back")]]
     )
 
 
@@ -66,7 +74,11 @@ def _format_user_card(user_id: int, user_data: dict[str, Any]) -> str:
     language = user_data.get("language") or "uk"
     zodiac = user_data.get("zodiac_sign") or "all"
     last_daily = user_data.get("last_daily_card_date") or "-"
-    balance = user_data.get("balance", 0)
+    balance = int(user_data.get("balance", 0) or 0)
+    referred_by = user_data.get("referred_by") or "-"
+    referral_bonus_granted = "так" if user_data.get("referral_bonus_granted") else "ні"
+    referrals_count = int(user_data.get("referrals_count", 0) or 0)
+    referral_rewards_total = int(user_data.get("referral_rewards_total", 0) or 0)
 
     return (
         "<b>Користувач</b>\n\n"
@@ -76,8 +88,44 @@ def _format_user_card(user_id: int, user_data: dict[str, Any]) -> str:
         f"Мова: {language}\n"
         f"Знак: {zodiac}\n"
         f"Баланс: <b>{balance}</b> ⭐\n"
-        f"Остання карта дня: {last_daily}"
+        f"Остання карта дня: {last_daily}\n\n"
+        f"Запрошений від: <code>{referred_by}</code>\n"
+        f"Реферальний бонус уже видано: {referral_bonus_granted}\n"
+        f"Запрошено друзів: {referrals_count}\n"
+        f"Зароблено по рефералці: <b>{referral_rewards_total}</b> ⭐"
     )
+
+
+def _format_referrals_list(user_id: int, referrals: list[dict[str, Any]]) -> str:
+    if not referrals:
+        return (
+            "<b>Запрошені користувачі</b>\n\n"
+            f"Користувач <code>{user_id}</code> поки нікого не запросив."
+        )
+
+    lines = [
+        "<b>Запрошені користувачі</b>",
+        "",
+        f"Реферер: <code>{user_id}</code>",
+        f"Усього: <b>{len(referrals)}</b>",
+        "",
+    ]
+
+    for idx, item in enumerate(referrals[:25], start=1):
+        invited_user_id = item.get("user_id", "-")
+        username = _format_username(item.get("username") or "")
+        first_name = item.get("first_name") or "-"
+        lang = item.get("language") or "uk"
+        bonus_granted = "так" if item.get("referral_bonus_granted") else "ні"
+        last_daily = item.get("last_daily_card_date") or "-"
+        lines.append(
+            f"{idx}. <code>{invited_user_id}</code> | {username} | {first_name} | {lang} | бонус: {bonus_granted} | карта дня: {last_daily}"
+        )
+
+    if len(referrals) > 25:
+        lines.extend(["", f"Показано перші 25 із {len(referrals)}."])
+
+    return "\n".join(lines)
 
 
 async def _show_admin_home(target: Message | CallbackQuery) -> None:
@@ -123,6 +171,9 @@ async def admin_stats(callback: CallbackQuery, db: firestore.Client) -> None:
         f"З балансом > 0: <b>{stats['users_with_balance']}</b>\n"
         f"Хоч раз відкривали карту дня: <b>{stats['users_with_daily_card']}</b>\n"
         f"Обрали знак зодіаку: <b>{stats['users_with_zodiac']}</b>\n\n"
+        f"Запрошені по рефералці: <b>{stats['users_referred']}</b>\n"
+        f"Активні реферери: <b>{stats['active_referrers']}</b>\n"
+        f"Всього видано реферальних бонусів: <b>{stats['total_referral_rewards']}</b> ⭐\n\n"
         f"Мови: uk <b>{stats['lang_uk']}</b> | en <b>{stats['lang_en']}</b> | ru <b>{stats['lang_ru']}</b>"
     )
 
@@ -168,6 +219,40 @@ async def admin_user_lookup(message: Message, state: FSMContext, db: firestore.C
         reply_markup=_user_card_kb(target_user_id),
         parse_mode="HTML",
     )
+
+
+@router.callback_query(F.data.startswith(f"{CB_ADMIN_REFERRALS}:"))
+async def admin_referrals(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not _is_admin(callback.from_user.id if callback.from_user else None):
+        return
+
+    if not callback.message:
+        await callback.answer()
+        return
+
+    parts = callback.data.split(":")
+    target_user_id = int(parts[2 if parts[-1] == "back" else 1]) if parts[-1] == "back" else int(parts[-1])
+
+    if parts[-1] == "back":
+        user_data = await get_user(db, target_user_id)
+        if not user_data:
+            await callback.answer("Користувача не знайдено.", show_alert=True)
+            return
+        await callback.message.edit_text(
+            _format_user_card(target_user_id, user_data),
+            reply_markup=_user_card_kb(target_user_id),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+        return
+
+    referrals = await get_referred_users(db, target_user_id)
+    await callback.message.edit_text(
+        _format_referrals_list(target_user_id, referrals),
+        reply_markup=_user_back_kb(target_user_id),
+        parse_mode="HTML",
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith(f"{CB_ADMIN_SET_BALANCE}:"))
