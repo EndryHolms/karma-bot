@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -357,3 +357,10 @@ async def get_user_language(db: firestore.Client, user_id: int) -> str:
         return "uk"
 
     return await asyncio.to_thread(_get_sync)
+
+async def update_horoscope_enabled(db: firestore.Client, user_id: int, enabled: bool) -> None:
+    def _update_sync() -> None:
+        doc_ref = _users_col(db).document(str(user_id))
+        doc_ref.set({"horoscope_enabled": enabled}, merge=True)
+
+    await asyncio.to_thread(_update_sync)

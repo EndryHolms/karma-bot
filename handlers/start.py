@@ -6,14 +6,20 @@ from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from firebase_admin import firestore
 
-from firebase_db import REFERRAL_DAILY_BONUS, bind_referrer, ensure_user, update_user_language
+from firebase_db import (
+    REFERRAL_DAILY_BONUS,
+    bind_referrer,
+    ensure_user,
+    update_horoscope_enabled,
+    update_user_language,
+    update_user_zodiac,
+)
 from keyboards import (
     CB_BACK_MENU,
     CB_CHANGE_ZODIAC,
     CB_PROFILE,
     language_selection_kb,
     main_menu_kb,
-    zodiac_selection_kb,
 )
 from lexicon import get_text
 
@@ -21,6 +27,7 @@ router = Router()
 
 CB_INVITE_FRIEND = "profile:invite"
 CB_CHANGE_LANGUAGE = "profile:language"
+CB_TOGGLE_HOROSCOPE = "profile:toggle_horoscope"
 
 _PROFILE_TEXT = {
     "uk": (
@@ -80,6 +87,39 @@ _LANGUAGE_PROMPT = {
     "uk": "🌐 <b>Оберіть мову</b>",
     "en": "🌐 <b>Choose your language</b>",
     "ru": "🌐 <b>Выберите язык</b>",
+}
+
+_HOROSCOPE_SETTINGS_TEXT = {
+    "uk": (
+        "🔮 <b>Налаштування гороскопу</b>\n\n"
+        "<b>Твій знак:</b> {zodiac}\n"
+        "<b>Щоденна розсилка:</b> {status}\n\n"
+        "<i>Обери знак для персонального гороскопу або вимкни щоденну розсилку, якщо хочеш отримувати менше повідомлень.</i>"
+    ),
+    "en": (
+        "🔮 <b>Horoscope settings</b>\n\n"
+        "<b>Your sign:</b> {zodiac}\n"
+        "<b>Daily delivery:</b> {status}\n\n"
+        "<i>Choose your sign for a personal horoscope or turn off the daily delivery if you want fewer messages.</i>"
+    ),
+    "ru": (
+        "🔮 <b>Настройки гороскопа</b>\n\n"
+        "<b>Твой знак:</b> {zodiac}\n"
+        "<b>Ежедневная рассылка:</b> {status}\n\n"
+        "<i>Выбери знак для персонального гороскопа или выключи ежедневную рассылку, если хочешь получать меньше сообщений.</i>"
+    ),
+}
+
+_HOROSCOPE_STATUS = {
+    "uk": {True: "Увімкнено", False: "Вимкнено"},
+    "en": {True: "Enabled", False: "Disabled"},
+    "ru": {True: "Включена", False: "Выключена"},
+}
+
+_HOROSCOPE_TOGGLE_BUTTON = {
+    "uk": {True: "🔕 Вимкнути щоденний гороскоп", False: "🔔 Увімкнути щоденний гороскоп"},
+    "en": {True: "🔕 Turn off daily horoscope", False: "🔔 Turn on daily horoscope"},
+    "ru": {True: "🔕 Выключить ежедневный гороскоп", False: "🔔 Включить ежедневный гороскоп"},
 }
 
 _REFERRAL_SCREEN = {
@@ -150,6 +190,75 @@ def _extract_referrer_id(message: Message) -> int | None:
         return None
 
     return int(raw_id)
+
+
+def _horoscope_status_text(lang: str, enabled: bool) -> str:
+    statuses = _HOROSCOPE_STATUS.get(lang, _HOROSCOPE_STATUS["uk"])
+    return statuses[enabled]
+
+
+def _horoscope_toggle_text(lang: str, enabled: bool) -> str:
+    labels = _HOROSCOPE_TOGGLE_BUTTON.get(lang, _HOROSCOPE_TOGGLE_BUTTON["uk"])
+    return labels[enabled]
+
+
+def _horoscope_settings_text(lang: str, zodiac: str, enabled: bool) -> str:
+    return _localized(_HOROSCOPE_SETTINGS_TEXT, lang).format(
+        zodiac=zodiac,
+        status=_horoscope_status_text(lang, enabled),
+    )
+
+
+def _horoscope_settings_kb(lang: str, enabled: bool) -> InlineKeyboardMarkup:
+    z = get_text(lang, "zodiacs")
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=z["aries"], callback_data="set_zodiac:aries"),
+                InlineKeyboardButton(text=z["taurus"], callback_data="set_zodiac:taurus"),
+                InlineKeyboardButton(text=z["gemini"], callback_data="set_zodiac:gemini"),
+            ],
+            [
+                InlineKeyboardButton(text=z["cancer"], callback_data="set_zodiac:cancer"),
+                InlineKeyboardButton(text=z["leo"], callback_data="set_zodiac:leo"),
+                InlineKeyboardButton(text=z["virgo"], callback_data="set_zodiac:virgo"),
+            ],
+            [
+                InlineKeyboardButton(text=z["libra"], callback_data="set_zodiac:libra"),
+                InlineKeyboardButton(text=z["scorpio"], callback_data="set_zodiac:scorpio"),
+                InlineKeyboardButton(text=z["sagittarius"], callback_data="set_zodiac:sagittarius"),
+            ],
+            [
+                InlineKeyboardButton(text=z["capricorn"], callback_data="set_zodiac:capricorn"),
+                InlineKeyboardButton(text=z["aquarius"], callback_data="set_zodiac:aquarius"),
+                InlineKeyboardButton(text=z["pisces"], callback_data="set_zodiac:pisces"),
+            ],
+            [InlineKeyboardButton(text=get_text(lang, "btn_all_signs"), callback_data="set_zodiac:all")],
+            [InlineKeyboardButton(text=_horoscope_toggle_text(lang, enabled), callback_data=CB_TOGGLE_HOROSCOPE)],
+            [InlineKeyboardButton(text=get_text(lang, "btn_back_profile"), callback_data=CB_PROFILE)],
+        ]
+    )
+
+
+async def _render_horoscope_settings(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    user_data = doc.to_dict() or {}
+    lang = user_data.get("language", "uk")
+    enabled = bool(user_data.get("horoscope_enabled", True))
+    current_zodiac = user_data.get("zodiac_sign", "all")
+    zodiac_dict = get_text(lang, "zodiacs")
+    zodiac_name = zodiac_dict.get(current_zodiac, zodiac_dict.get("all"))
+    text = _horoscope_settings_text(lang, zodiac_name, enabled)
+    kb = _horoscope_settings_kb(lang, enabled)
+
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
 @router.message(CommandStart())
@@ -336,19 +445,23 @@ async def setup_zodiac(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user:
         return
 
+    await _render_horoscope_settings(callback, db)
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_TOGGLE_HOROSCOPE)
+async def toggle_horoscope_delivery(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user:
+        return
+
     user_id = str(callback.from_user.id)
     doc = db.collection("users").document(user_id).get()
-    lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
-
-    text = get_text(lang, "zodiac_setup_title")
-    kb = zodiac_selection_kb(lang)
-
-    if callback.message:
-        try:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
+    user_data = doc.to_dict() or {}
+    lang = user_data.get("language", "uk")
+    current = bool(user_data.get("horoscope_enabled", True))
+    await update_horoscope_enabled(db, callback.from_user.id, not current)
+    await _render_horoscope_settings(callback, db)
+    await callback.answer(_horoscope_status_text(lang, not current))
 
 
 @router.callback_query(F.data.startswith("set_zodiac:"))
@@ -357,16 +470,11 @@ async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> N
         return
 
     zodiac = callback.data.split(":")[1]
+    await update_user_zodiac(db, callback.from_user.id, zodiac)
+
     user_id = str(callback.from_user.id)
-
-    db.collection("users").document(user_id).set({"zodiac_sign": zodiac}, merge=True)
-
     doc = db.collection("users").document(user_id).get()
     lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
 
     await callback.answer(get_text(lang, "zodiac_saved"))
-    await profile(callback, db)
-
-
-
-
+    await _render_horoscope_settings(callback, db)

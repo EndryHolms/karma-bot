@@ -180,6 +180,8 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
         user_data = doc.to_dict() or {}
         user_id = doc.id
         lang = user_data.get("language", "uk")
+        if user_data.get("horoscope_enabled", True) is False:
+            continue
         zodiac_pref = user_data.get("zodiac_sign", "all")
         text_to_send = user_horoscopes.get(zodiac_pref, user_horoscopes["all"])
         title = _localized(_HOROSCOPE_TITLE, lang).format(date=today_date)
@@ -202,3 +204,4 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
             logging.error("Horoscope send failed for %s: %s", user_id, exc)
 
     logging.info("Daily horoscope sent to %s users", count)
+
