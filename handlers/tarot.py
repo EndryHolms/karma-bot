@@ -83,6 +83,25 @@ def _heading_guide(lang: str) -> dict[str, str]:
     return HEADING_GUIDE.get(lang, HEADING_GUIDE["uk"])
 
 
+def _tarot_format_prompt(lang: str, target_language: str) -> str:
+    headings = _heading_guide(lang)
+    return (
+        f"Write the entire response only in {target_language}. Do not mix languages. "
+        f"Use Telegram HTML only. Do not use Markdown. "
+        f"Keep the emojis exactly as shown. Keep exactly one empty line after each heading and one empty line between blocks. "
+        f"Return the answer in exactly this structure:\n\n"
+        f"🎴 <b>{headings['cards']}:</b>\n\n"
+        f"[text]\n\n"
+        f"👁 <b>{headings['reading']}:</b>\n\n"
+        f"[text]\n\n"
+        f"✨ <b>{headings['advice']}:</b>\n\n"
+        f"[text]\n\n"
+        f"🌌 <b>{headings['affirmation']}:</b>\n\n"
+        f"[text]\n\n"
+        f"The affirmation must also be fully in {target_language}."
+    )
+
+
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
     def _call_sync() -> str:
         try:
@@ -215,15 +234,9 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
-    headings = _heading_guide(lang)
     prompt = (
-        f"Draw a card of the day and explain the energy of this day. "
-        f"Write the entire response only in {target_language}. "
-        f"Do not mix languages. Use Telegram HTML only. Do not use Markdown. "
-        f"Structure the answer exactly with these headings in {target_language}: "
-        f"<b>{headings['cards']}:</b>, <b>{headings['reading']}:</b>, "
-        f"<b>{headings['advice']}:</b>, <b>{headings['affirmation']}:</b>. "
-        f"The affirmation must be uplifting and also fully in {target_language}."
+        "Draw a card of the day and explain the energy of this day. "
+        + _tarot_format_prompt(lang, target_language)
     )
 
     ai_task = asyncio.create_task(_gemini_generate_text(tarot_model, prompt))
@@ -301,7 +314,7 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
 
     ai_languages = {"uk": "Ukrainian", "en": "English", "ru": "Russian"}
     target_language = ai_languages.get(lang, "Ukrainian")
-    headings = _heading_guide(lang)
+    format_prompt = _tarot_format_prompt(lang, target_language)
 
     text = ""
     try:
@@ -310,20 +323,14 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
             audio_bytes = (await bot.download_file(file_info.file_path)).read()
             prompt = (
                 f"The user sent voice context about {topic}. Create a tarot reading. "
-                f"Write the entire response only in {target_language}. Do not mix languages. "
-                f"Use Telegram HTML only. Use these headings: "
-                f"<b>{headings['cards']}:</b>, <b>{headings['reading']}:</b>, "
-                f"<b>{headings['advice']}:</b>, <b>{headings['affirmation']}:</b>."
+                + format_prompt
             )
             text = await _gemini_generate_with_audio(tarot_model, prompt, audio_bytes)
         else:
             user_text = message.text or ""
             prompt = (
                 f"The user context about {topic} is: {user_text}. Create a tarot reading. "
-                f"Write the entire response only in {target_language}. Do not mix languages. "
-                f"Use Telegram HTML only. Use these headings: "
-                f"<b>{headings['cards']}:</b>, <b>{headings['reading']}:</b>, "
-                f"<b>{headings['advice']}:</b>, <b>{headings['affirmation']}:</b>."
+                + format_prompt
             )
             text = await _gemini_generate_text(tarot_model, prompt)
     except Exception as e:

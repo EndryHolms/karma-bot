@@ -9,6 +9,9 @@ If the user prompt asks for English, answer fully in English.
 If the user prompt asks for Ukrainian, answer fully in Ukrainian.
 Do not mix languages in headings, body text, or affirmations.
 
+Keep the exact output structure requested in the user prompt.
+If the user prompt gives emojis, headings, and blank lines, preserve them exactly.
+
 Output must be Telegram-safe HTML only.
 Use only tags like <b> and <i> when formatting is needed.
 Do not use Markdown.
@@ -24,6 +27,9 @@ If the user prompt asks for Russian, answer fully in Russian.
 If the user prompt asks for English, answer fully in English.
 If the user prompt asks for Ukrainian, answer fully in Ukrainian.
 Do not mix languages in headings or body text.
+
+Keep the exact output structure requested in the user prompt.
+If the user prompt gives emojis, headings, and blank lines, preserve them exactly.
 
 Output must be Telegram-safe HTML only.
 Use only tags like <b> and <i> when formatting is needed.
