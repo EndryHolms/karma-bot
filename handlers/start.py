@@ -28,6 +28,7 @@ router = Router()
 CB_INVITE_FRIEND = "profile:invite"
 CB_CHANGE_LANGUAGE = "profile:language"
 CB_TOGGLE_HOROSCOPE = "profile:toggle_horoscope"
+LANG_PROFILE_PREFIX = "set_lang_profile"
 
 _PROFILE_TEXT = {
     "uk": (
@@ -284,13 +285,18 @@ async def command_start(message: Message, db: firestore.Client) -> None:
 
 
 @router.callback_query(F.data.startswith("set_lang:"))
+@router.callback_query(F.data.startswith(f"{LANG_PROFILE_PREFIX}:"))
 async def process_language_selection(callback: CallbackQuery, db: firestore.Client) -> None:
     if not callback.from_user or not callback.message:
         return
 
-    lang = callback.data.split(":")[1]
+    callback_prefix, lang = callback.data.split(":", 1)
     await update_user_language(db, callback.from_user.id, lang)
     await callback.answer(get_text(lang, "lang_saved"))
+
+    if callback_prefix == LANG_PROFILE_PREFIX:
+        await profile(callback, db)
+        return
 
     current_text = callback.message.text or callback.message.caption or ""
     lowered = current_text.lower()
@@ -378,7 +384,7 @@ async def change_language_from_profile(callback: CallbackQuery, db: firestore.Cl
 
     await callback.message.edit_text(
         _localized(_LANGUAGE_PROMPT, lang),
-        reply_markup=language_selection_kb(),
+        reply_markup=language_selection_kb(prefix=LANG_PROFILE_PREFIX),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -478,3 +484,5 @@ async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> N
 
     await callback.answer(get_text(lang, "zodiac_saved"))
     await _render_horoscope_settings(callback, db)
+
+

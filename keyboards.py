@@ -12,12 +12,12 @@ CB_CHANGE_ZODIAC = "change_zodiac"
 CB_SHARE_HOROSCOPE = "horoscope:share"
 
 
-def language_selection_kb() -> InlineKeyboardMarkup:
+def language_selection_kb(prefix: str = "set_lang") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🇺🇦 Українська", callback_data="set_lang:uk")],
-            [InlineKeyboardButton(text="🇬🇧 English", callback_data="set_lang:en")],
-            [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang:ru")],
+            [InlineKeyboardButton(text="🇺🇦 Українська", callback_data=f"{prefix}:uk")],
+            [InlineKeyboardButton(text="🇬🇧 English", callback_data=f"{prefix}:en")],
+            [InlineKeyboardButton(text="🇷🇺 Русский", callback_data=f"{prefix}:ru")],
         ]
     )
 
@@ -74,3 +74,4 @@ def zodiac_selection_kb(lang: str = "uk") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=get_text(lang, "btn_back_profile"), callback_data=CB_PROFILE)],
         ]
     )
+
