@@ -155,16 +155,16 @@ async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: byte
 
 async def _send_long(message: Message, text: str, reply_markup: Any = None, lang: str = "uk") -> None:
     limit = 4000
-    chunks = [text[i : i + limit] for i in range(0, len(text), limit)] or [text]
+    chunks = [text[i : i + limit] for i in range(0, len(text), limit)]
+    for chunk in chunks:
+        await message.answer(chunk)
 
-    for chunk in chunks[:-1]:
-        await message.answer(chunk, parse_mode="HTML")
-
-    await message.answer(
-        chunks[-1],
-        reply_markup=reply_markup,
-        parse_mode="HTML",
-    )
+    if reply_markup:
+        await message.answer(
+            get_text(lang, "more_action_btn"),
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+        )
 
 
 async def _start_paid_reading(
@@ -278,9 +278,8 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
         if text:
             current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
-            await callback.message.answer_photo(photo=current_img)
-            content_text = f"{get_text(lang, 'daily_energy_here')}\n\n{text}"
-            await _send_long(callback.message, content_text, reply_markup=main_menu_kb(lang), lang=lang)
+            await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
+            await _send_long(callback.message, text, reply_markup=main_menu_kb(lang), lang=lang)
 
             if referral_bonus_granted_to:
                 ref_lang = await get_user_language(db, referral_bonus_granted_to)
@@ -392,9 +391,9 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
     img_dict = IMAGES_LOVE if reading_key == "relationship" else IMAGES_CAREER
     img_to_send = img_dict.get(lang, img_dict["uk"])
 
-    await message.answer_photo(photo=img_to_send)
-    content_text = f"{get_text(lang, 'cards_on_table')}\n\n{text}"
-    await _send_long(message, content_text, reply_markup=main_menu_kb(lang), lang=lang)
+    await message.answer_photo(photo=img_to_send, caption=get_text(lang, "cards_on_table"), parse_mode="HTML")
+    await _send_long(message, text, reply_markup=main_menu_kb(lang), lang=lang)
     await state.clear()
+
 
 
