@@ -133,6 +133,69 @@ async def increment_balance(db: firestore.Client, user_id: int, delta: int) -> i
     return await asyncio.to_thread(_tx_sync)
 
 
+async def set_balance(db: firestore.Client, user_id: int, balance: int) -> int:
+    def _set_sync() -> int:
+        ref = _users_col(db).document(str(user_id))
+        snap = ref.get()
+        if not snap.exists:
+            ref.set(
+                {
+                    "username": "",
+                    "first_name": "",
+                    "balance": balance,
+                    "joined_at": firestore.SERVER_TIMESTAMP,
+                }
+            )
+        else:
+            ref.set({"balance": balance}, merge=True)
+        return balance
+
+    return await asyncio.to_thread(_set_sync)
+
+
+async def get_user_stats(db: firestore.Client) -> Dict[str, int]:
+    def _stats_sync() -> Dict[str, int]:
+        stats = {
+            "total_users": 0,
+            "users_with_balance": 0,
+            "users_with_daily_card": 0,
+            "users_with_zodiac": 0,
+            "lang_uk": 0,
+            "lang_en": 0,
+            "lang_ru": 0,
+        }
+
+        for snap in _users_col(db).stream():
+            data = snap.to_dict() or {}
+            stats["total_users"] += 1
+
+            try:
+                balance = int(data.get("balance", 0))
+            except (TypeError, ValueError):
+                balance = 0
+            if balance > 0:
+                stats["users_with_balance"] += 1
+
+            if data.get("last_daily_card_date"):
+                stats["users_with_daily_card"] += 1
+
+            zodiac = data.get("zodiac_sign", "all")
+            if zodiac and zodiac != "all":
+                stats["users_with_zodiac"] += 1
+
+            lang = data.get("language", "uk")
+            if lang == "en":
+                stats["lang_en"] += 1
+            elif lang == "ru":
+                stats["lang_ru"] += 1
+            else:
+                stats["lang_uk"] += 1
+
+        return stats
+
+    return await asyncio.to_thread(_stats_sync)
+
+
 async def update_user_zodiac(db: firestore.Client, user_id: int, zodiac_key: str) -> None:
     def _update_sync() -> None:
         doc_ref = _users_col(db).document(str(user_id))

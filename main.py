@@ -14,6 +14,7 @@ from google.generativeai.types import HarmBlockThreshold, HarmCategory
 
 from config import load_settings
 from firebase_db import init_firestore
+from handlers.admin import router as admin_router
 from handlers.advice import router as advice_router
 from handlers.payment import router as payment_router
 from handlers.start import router as start_router
@@ -78,6 +79,7 @@ async def main() -> None:
         safety_settings=SAFETY_SETTINGS,
     )
 
+    dp.include_router(admin_router)
     dp.include_router(payment_router)
     dp.include_router(start_router)
     dp.include_router(tarot_router)
