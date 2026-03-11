@@ -28,9 +28,9 @@ _HOROSCOPE_FOLLOWUP = {
 }
 
 _HOROSCOPE_SOURCE = {
-    "uk": "✨ <i>Більше підказок у Karma:</i> {link}",
-    "en": "✨ <i>More guidance in Karma:</i> {link}",
-    "ru": "✨ <i>Больше подсказок в Karma:</i> {link}",
+    "uk": "🔮 Це лише загальний знак. Персональна відповідь — у <a href=\"{link}\">Karma</a>",
+    "en": "🔮 This is only a general sign. Your personal answer is in <a href=\"{link}\">Karma</a>",
+    "ru": "🔮 Это лишь общий знак. Персональный ответ — в <a href=\"{link}\">Karma</a>",
 }
 
 
@@ -204,4 +204,5 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
             logging.error("Horoscope send failed for %s: %s", user_id, exc)
 
     logging.info("Daily horoscope sent to %s users", count)
+
 
