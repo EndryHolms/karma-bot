@@ -33,6 +33,53 @@ _HOROSCOPE_SOURCE = {
     "ru": "🔮 Это лишь общий знак. Персональный ответ — в <a href=\"{link}\">Karma</a>",
 }
 
+_HOROSCOPE_SIGNS = {
+    "uk": {
+        "aries": "Овен",
+        "taurus": "Телець",
+        "gemini": "Близнюки",
+        "cancer": "Рак",
+        "leo": "Лев",
+        "virgo": "Діва",
+        "libra": "Терези",
+        "scorpio": "Скорпіон",
+        "sagittarius": "Стрілець",
+        "capricorn": "Козеріг",
+        "aquarius": "Водолій",
+        "pisces": "Риби",
+    },
+    "en": {
+        "aries": "Aries",
+        "taurus": "Taurus",
+        "gemini": "Gemini",
+        "cancer": "Cancer",
+        "leo": "Leo",
+        "virgo": "Virgo",
+        "libra": "Libra",
+        "scorpio": "Scorpio",
+        "sagittarius": "Sagittarius",
+        "capricorn": "Capricorn",
+        "aquarius": "Aquarius",
+        "pisces": "Pisces",
+    },
+    "ru": {
+        "aries": "Овен",
+        "taurus": "Телец",
+        "gemini": "Близнецы",
+        "cancer": "Рак",
+        "leo": "Лев",
+        "virgo": "Дева",
+        "libra": "Весы",
+        "scorpio": "Скорпион",
+        "sagittarius": "Стрелец",
+        "capricorn": "Козерог",
+        "aquarius": "Водолей",
+        "pisces": "Рыбы",
+    },
+}
+
+_HOROSCOPE_LANGS = ("uk", "en", "ru")
+
 
 def _localized(mapping: dict[str, str], lang: str) -> str:
     return mapping.get(lang, mapping["uk"])
@@ -45,6 +92,10 @@ def _parse_date(value: str | None) -> datetime | None:
         return datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
         return None
+
+
+def _daily_horoscope_doc(db: firestore.Client, date_key: str):
+    return db.collection("daily_horoscopes").document(date_key)
 
 
 async def _store_share_text(db: firestore.Client, user_id: str, text: str, date_key: str) -> None:
@@ -68,6 +119,116 @@ async def _mark_monthly_reminder_sent(db: firestore.Client, user_id: str, month_
         )
 
     await asyncio.to_thread(_write_sync)
+
+
+async def _get_cached_horoscope_payload(db: firestore.Client, date_key: str) -> dict | None:
+    def _read_sync() -> dict | None:
+        snap = _daily_horoscope_doc(db, date_key).get()
+        if not snap.exists:
+            return None
+        data = snap.to_dict() or {}
+        payload = data.get("payload")
+        return payload if isinstance(payload, dict) else None
+
+    return await asyncio.to_thread(_read_sync)
+
+
+async def _store_cached_horoscope_payload(db: firestore.Client, date_key: str, payload: dict) -> None:
+    def _write_sync() -> None:
+        _daily_horoscope_doc(db, date_key).set(
+            {
+                "payload": payload,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+
+    await asyncio.to_thread(_write_sync)
+
+
+def _build_horoscope_prompt() -> str:
+    return (
+        "Generate a daily horoscope for all 12 zodiac signs in exactly 3 sections: LANG:uk, LANG:en, LANG:ru. "
+        "Each section must contain exactly 12 horoscope lines and no extra introduction or conclusion. "
+        "Tone: witty, ironic, life-like, with sarcasm about work, money, weather, and relationships. "
+        "Use exactly this format inside each language section: zodiac emoji, localized sign name, space, hyphen, space, one sentence. "
+        "Put one empty line between lines. "
+        "Use these exact sign names for each language. "
+        "For LANG:uk use: Овен, Телець, Близнюки, Рак, Лев, Діва, Терези, Скорпіон, Стрілець, Козеріг, Водолій, Риби. "
+        "For LANG:en use: Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces. "
+        "For LANG:ru use: Овен, Телец, Близнецы, Рак, Лев, Дева, Весы, Скорпион, Стрелец, Козерог, Водолей, Рыбы. "
+        "Return only this structure:\n\n"
+        "LANG:uk\n"
+        "♈ Овен - ...\n\n"
+        "... 12 lines total ...\n\n"
+        "LANG:en\n"
+        "♈ Aries - ...\n\n"
+        "... 12 lines total ...\n\n"
+        "LANG:ru\n"
+        "♈ Овен - ...\n\n"
+        "... 12 lines total ..."
+    )
+
+
+def _extract_language_block(raw_text: str, lang: str) -> str:
+    marker = f"LANG:{lang}"
+    start = raw_text.find(marker)
+    if start == -1:
+        return ""
+    start += len(marker)
+    remainder = raw_text[start:].lstrip()
+    next_positions = [pos for other in _HOROSCOPE_LANGS if other != lang for pos in [remainder.find(f"LANG:{other}")] if pos != -1]
+    end = min(next_positions) if next_positions else len(remainder)
+    return remainder[:end].strip()
+
+
+def _build_language_payload(block: str, lang: str) -> dict[str, str]:
+    lines = [line.strip() for line in block.splitlines() if line.strip()]
+    full_text = "\n\n".join(lines)
+    payload: dict[str, str] = {"all": full_text}
+    sign_names = _HOROSCOPE_SIGNS[lang]
+
+    for key, name in sign_names.items():
+        matched_line = next((line for line in lines if name in line and (" - " in line or " — " in line)), "")
+        payload[key] = matched_line or full_text
+
+    return payload
+
+
+def _parse_multilang_horoscope(raw_text: str) -> dict[str, dict[str, str]]:
+    payload: dict[str, dict[str, str]] = {}
+    for lang in _HOROSCOPE_LANGS:
+        block = _extract_language_block(raw_text, lang)
+        if not block:
+            raise ValueError(f"Missing horoscope block for {lang}")
+        payload[lang] = _build_language_payload(block, lang)
+    return payload
+
+
+async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model, date_key: str) -> dict[str, dict[str, str]] | None:
+    cached = await _get_cached_horoscope_payload(db, date_key)
+    if cached:
+        return cached
+
+    prompt = _build_horoscope_prompt()
+    try:
+        response = await asyncio.to_thread(tarot_model.generate_content, prompt)
+        raw_text = getattr(response, "text", "").strip()
+    except Exception as exc:
+        logging.error("Horoscope generation failed: %s", exc)
+        return None
+
+    if not raw_text:
+        return None
+
+    try:
+        payload = _parse_multilang_horoscope(raw_text)
+    except Exception as exc:
+        logging.error("Horoscope parsing failed: %s", exc)
+        return None
+
+    await _store_cached_horoscope_payload(db, date_key, payload)
+    return payload
 
 
 async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
@@ -123,55 +284,12 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     today_date = now.strftime("%d.%m")
     today_key = now.strftime("%Y-%m-%d")
 
-    prompt = (
-        "Напиши іронічний, кумедний та дуже життєвий гороскоп на сьогодні для всіх 12 знаків зодіаку "
-        "(по одному короткому реченню). "
-        "Стиль: сарказм, іронія від роботи, жарти про гроші, погоду та стосунки. "
-        "СУВОРА УМОВА: Жодного тексту до чи після знаків. Без вступів, без висновків, без зірочок Markdown. "
-        "Тільки 12 рядків. Обов'язково роби порожній рядок (Enter) між знаками. "
-        "Формат має бути точно таким:\n"
-        "♈ Овен - [твій жарт]\n\n"
-        "♉ Телець - [твій жарт]\n\n"
-        "...і так для всіх 12 знаків."
-    )
-
-    try:
-        response = await asyncio.to_thread(tarot_model.generate_content, prompt)
-        raw_text = getattr(response, "text", "").strip()
-    except Exception as exc:
-        logging.error("Horoscope generation failed: %s", exc)
-        return
-
-    if not raw_text:
+    payload = await _get_or_generate_horoscope_payload(db, tarot_model, today_key)
+    if not payload:
         return
 
     me = await bot.get_me()
     bot_link = f"https://t.me/{me.username}" if me.username else None
-
-    signs_mapping = {
-        "aries": "Овен",
-        "taurus": "Телець",
-        "gemini": "Близнюки",
-        "cancer": "Рак",
-        "leo": "Лев",
-        "virgo": "Діва",
-        "libra": "Терези",
-        "scorpio": "Скорпіон",
-        "sagittarius": "Стрілець",
-        "capricorn": "Козеріг",
-        "aquarius": "Водолій",
-        "pisces": "Риби",
-    }
-
-    user_horoscopes = {"all": raw_text}
-    lines = raw_text.split("\n")
-    for key, name in signs_mapping.items():
-        sign_line = ""
-        for line in lines:
-            if name in line and ("-" in line or "—" in line):
-                sign_line = line.strip()
-                break
-        user_horoscopes[key] = sign_line if sign_line else raw_text
 
     users_ref = db.collection("users").stream()
     count = 0
@@ -180,10 +298,14 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
         user_data = doc.to_dict() or {}
         user_id = doc.id
         lang = user_data.get("language", "uk")
+        if lang not in payload:
+            lang = "uk"
         if user_data.get("horoscope_enabled", True) is False:
             continue
+
         zodiac_pref = user_data.get("zodiac_sign", "all")
-        text_to_send = user_horoscopes.get(zodiac_pref, user_horoscopes["all"])
+        lang_payload = payload[lang]
+        text_to_send = lang_payload.get(zodiac_pref, lang_payload["all"])
         title = _localized(_HOROSCOPE_TITLE, lang).format(date=today_date)
         final_message = f"{title}\n\n{text_to_send}"
         if bot_link:
@@ -204,5 +326,3 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
             logging.error("Horoscope send failed for %s: %s", user_id, exc)
 
     logging.info("Daily horoscope sent to %s users", count)
-
-
