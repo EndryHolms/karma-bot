@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 
 from aiogram import F, Router
 from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from firebase_admin import firestore
 
@@ -10,6 +11,7 @@ from firebase_db import (
     REFERRAL_DAILY_BONUS,
     bind_referrer,
     ensure_user,
+    release_ai_action_lock,
     update_horoscope_enabled,
     update_user_language,
     update_user_zodiac,
@@ -427,13 +429,16 @@ async def invite_friend(callback: CallbackQuery, db: firestore.Client) -> None:
 
 
 @router.callback_query(F.data == CB_BACK_MENU)
-async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client) -> None:
+async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
     if not callback.from_user:
         return
 
     user_id = str(callback.from_user.id)
     doc = db.collection("users").document(user_id).get()
     lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
+
+    await release_ai_action_lock(db, callback.from_user.id)
+    await state.clear()
 
     text = get_text(lang, "main_menu_title")
     kb = main_menu_kb(lang)
@@ -484,5 +489,7 @@ async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> N
 
     await callback.answer(get_text(lang, "zodiac_saved"))
     await _render_horoscope_settings(callback, db)
+
+
 
 

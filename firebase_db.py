@@ -364,3 +364,127 @@ async def update_horoscope_enabled(db: firestore.Client, user_id: int, enabled: 
         doc_ref.set({"horoscope_enabled": enabled}, merge=True)
 
     await asyncio.to_thread(_update_sync)
+
+async def claim_daily_card_slot(db: firestore.Client, user_id: int, date_key: str) -> str:
+    def _tx_sync() -> str:
+        ref = _users_col(db).document(str(user_id))
+
+        @firestore.transactional
+        def _run(transaction: firestore.Transaction) -> str:
+            snap = ref.get(transaction=transaction)
+            data = snap.to_dict() or {} if snap.exists else {}
+
+            if data.get("last_daily_card_date") == date_key:
+                return "opened"
+            if data.get("daily_card_lock_date") == date_key:
+                return "locked"
+
+            transaction.set(
+                ref,
+                {
+                    "daily_card_lock_date": date_key,
+                    "daily_card_lock_at": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+            return "claimed"
+
+        transaction = db.transaction()
+        return _run(transaction)
+
+    return await asyncio.to_thread(_tx_sync)
+
+
+async def complete_daily_card_slot(db: firestore.Client, user_id: int, date_key: str) -> None:
+    def _update_sync() -> None:
+        ref = _users_col(db).document(str(user_id))
+        ref.set(
+            {
+                "last_daily_card_date": date_key,
+                "daily_card_lock_date": firestore.DELETE_FIELD,
+                "daily_card_lock_at": firestore.DELETE_FIELD,
+            },
+            merge=True,
+        )
+
+    await asyncio.to_thread(_update_sync)
+
+
+async def release_daily_card_slot(db: firestore.Client, user_id: int, date_key: str) -> None:
+    def _tx_sync() -> None:
+        ref = _users_col(db).document(str(user_id))
+
+        @firestore.transactional
+        def _run(transaction: firestore.Transaction) -> None:
+            snap = ref.get(transaction=transaction)
+            data = snap.to_dict() or {} if snap.exists else {}
+            if data.get("last_daily_card_date") == date_key:
+                return
+            if data.get("daily_card_lock_date") != date_key:
+                return
+            transaction.set(
+                ref,
+                {
+                    "daily_card_lock_date": firestore.DELETE_FIELD,
+                    "daily_card_lock_at": firestore.DELETE_FIELD,
+                },
+                merge=True,
+            )
+
+        transaction = db.transaction()
+        _run(transaction)
+
+    await asyncio.to_thread(_tx_sync)
+
+async def claim_ai_action_lock(db: firestore.Client, user_id: int, action_key: str) -> bool:
+    def _tx_sync() -> bool:
+        ref = _users_col(db).document(str(user_id))
+
+        @firestore.transactional
+        def _run(transaction: firestore.Transaction) -> bool:
+            snap = ref.get(transaction=transaction)
+            data = snap.to_dict() or {} if snap.exists else {}
+            if data.get("active_ai_lock"):
+                return False
+            transaction.set(
+                ref,
+                {
+                    "active_ai_lock": action_key,
+                    "active_ai_lock_at": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+            return True
+
+        transaction = db.transaction()
+        return _run(transaction)
+
+    return await asyncio.to_thread(_tx_sync)
+
+
+async def release_ai_action_lock(db: firestore.Client, user_id: int, action_key: str | None = None) -> None:
+    def _tx_sync() -> None:
+        ref = _users_col(db).document(str(user_id))
+
+        @firestore.transactional
+        def _run(transaction: firestore.Transaction) -> None:
+            snap = ref.get(transaction=transaction)
+            data = snap.to_dict() or {} if snap.exists else {}
+            current = data.get("active_ai_lock")
+            if not current:
+                return
+            if action_key is not None and current != action_key:
+                return
+            transaction.set(
+                ref,
+                {
+                    "active_ai_lock": firestore.DELETE_FIELD,
+                    "active_ai_lock_at": firestore.DELETE_FIELD,
+                },
+                merge=True,
+            )
+
+        transaction = db.transaction()
+        _run(transaction)
+
+    await asyncio.to_thread(_tx_sync)

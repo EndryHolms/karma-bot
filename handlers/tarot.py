@@ -18,11 +18,16 @@ from firebase_admin import firestore
 from firebase_db import (
     REFERRAL_DAILY_BONUS,
     InsufficientBalanceError,
+    claim_ai_action_lock,
+    claim_daily_card_slot,
+    complete_daily_card_slot,
     ensure_user,
     get_balance,
     get_user_language,
     grant_referral_bonus_for_daily_card,
     increment_balance,
+    release_ai_action_lock,
+    release_daily_card_slot,
 )
 from handlers.payment import send_stars_invoice
 from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, main_menu_kb
@@ -188,6 +193,11 @@ async def _start_paid_reading(
     await callback.answer()
 
     lang = await get_user_language(db, callback.from_user.id)
+    action_key = f"reading:{reading_key}"
+    if not await claim_ai_action_lock(db, callback.from_user.id, action_key):
+        await callback.answer(get_text(lang, "magic_wait"), show_alert=True)
+        return
+
     is_admin = callback.from_user.id in ADMIN_IDS
 
     if not is_admin:
@@ -195,6 +205,7 @@ async def _start_paid_reading(
         if balance < price:
             title_key = "invoice_love_title" if reading_key == "relationship" else "invoice_career_title"
             desc_key = "invoice_love_desc" if reading_key == "relationship" else "invoice_career_desc"
+            await release_ai_action_lock(db, callback.from_user.id, action_key)
             await send_stars_invoice(
                 callback=callback,
                 title=get_text(lang, title_key),
@@ -209,10 +220,11 @@ async def _start_paid_reading(
         except InsufficientBalanceError:
             if callback.message:
                 await callback.message.answer(get_text(lang, "error_payment"))
+            await release_ai_action_lock(db, callback.from_user.id, action_key)
             return
 
     await state.set_state(ReadingStates.waiting_for_context)
-    await state.update_data(reading_key=reading_key, price=price)
+    await state.update_data(reading_key=reading_key, price=price, action_key=action_key)
 
     if callback.message:
         await callback.message.answer(
@@ -239,10 +251,12 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
 
     is_admin = callback.from_user.id in ADMIN_IDS
     if not is_admin:
-        doc = db.collection("users").document(user_id).get()
-        user_data = doc.to_dict() or {}
-        if user_data.get("last_daily_card_date") == today_str:
+        claim_status = await claim_daily_card_slot(db, callback.from_user.id, today_str)
+        if claim_status == "opened":
             await callback.answer(get_text(lang, "daily_already_opened"), show_alert=True)
+            return
+        if claim_status == "locked":
+            await callback.answer(get_text(lang, "magic_wait"), show_alert=True)
             return
 
     await callback.answer()
@@ -266,7 +280,7 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
     try:
         text = await ai_task
         if text:
-            db.collection("users").document(user_id).update({"last_daily_card_date": today_str})
+            await complete_daily_card_slot(db, callback.from_user.id, today_str)
             if not is_admin:
                 referral_bonus_granted_to = await grant_referral_bonus_for_daily_card(
                     db,
@@ -294,6 +308,8 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
             await callback.message.answer(get_text(lang, "error_generate"), reply_markup=main_menu_kb(lang))
     except Exception as e:
         print(f"Daily Handler Error: {e}")
+        if not is_admin:
+            await release_daily_card_slot(db, callback.from_user.id, today_str)
         try:
             await msg.delete()
         except Exception:
@@ -333,6 +349,7 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
 
     data = await state.get_data()
     reading_key = data.get("reading_key")
+    action_key = data.get("action_key") or (f"reading:{reading_key}" if reading_key else None)
     price = data.get("price", 1)
 
     topic_by_lang = {
@@ -385,6 +402,8 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
             reply_markup=main_menu_kb(lang),
             parse_mode="HTML",
         )
+        if action_key:
+            await release_ai_action_lock(db, message.from_user.id, action_key)
         await state.clear()
         return
 
@@ -393,7 +412,13 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
 
     await message.answer_photo(photo=img_to_send, caption=get_text(lang, "cards_on_table"), parse_mode="HTML")
     await _send_long(message, text, reply_markup=main_menu_kb(lang), lang=lang)
+    if action_key:
+        await release_ai_action_lock(db, message.from_user.id, action_key)
     await state.clear()
+
+
+
+
 
 
 

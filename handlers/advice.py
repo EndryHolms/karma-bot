@@ -11,7 +11,15 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from firebase_admin import firestore
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-from firebase_db import InsufficientBalanceError, ensure_user, get_balance, get_user_language, increment_balance
+from firebase_db import (
+    InsufficientBalanceError,
+    claim_ai_action_lock,
+    ensure_user,
+    get_balance,
+    get_user_language,
+    increment_balance,
+    release_ai_action_lock,
+)
 from handlers.payment import send_stars_invoice
 from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
@@ -103,14 +111,20 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
         username=callback.from_user.username or "",
         first_name=callback.from_user.first_name or "",
     )
-    await callback.answer()
 
     lang = await get_user_language(db, callback.from_user.id)
+    action_key = "advice"
+    if not await claim_ai_action_lock(db, callback.from_user.id, action_key):
+        await callback.answer(get_text(lang, "magic_wait"), show_alert=True)
+        return
+
+    await callback.answer()
     is_admin = callback.from_user.id in ADMIN_IDS
 
     if not is_admin:
         balance = await get_balance(db, callback.from_user.id)
         if balance < ADVICE_PRICE:
+            await release_ai_action_lock(db, callback.from_user.id, action_key)
             await send_stars_invoice(
                 callback=callback,
                 title=get_text(lang, "invoice_advice_title"),
@@ -125,10 +139,11 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
         except InsufficientBalanceError:
             if callback.message:
                 await callback.message.answer(get_text(lang, "error_payment"))
+            await release_ai_action_lock(db, callback.from_user.id, action_key)
             return
 
     await state.set_state(AdviceStates.waiting_for_question)
-    await state.update_data(price=ADVICE_PRICE)
+    await state.update_data(price=ADVICE_PRICE, action_key=action_key)
 
     if callback.message:
         await callback.message.answer(
@@ -146,6 +161,7 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
     user_text = message.text or get_text(lang, "default_advice_request")
 
     data = await state.get_data()
+    action_key = data.get("action_key", "advice")
     price = data.get("price", 1)
 
     msg = await message.answer(get_text(lang, "loading_advice"), reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
@@ -175,6 +191,7 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
 
         silent_msg = get_text(lang, "universe_silent")
         await message.answer(f"{silent_msg} {refund_note}".strip(), reply_markup=main_menu_kb(lang), parse_mode="HTML")
+        await release_ai_action_lock(db, message.from_user.id, action_key)
         await state.clear()
         return
 
@@ -183,7 +200,5 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
 
     await message.answer(text, parse_mode="HTML")
     await message.answer(get_text(lang, "more_action_btn"), reply_markup=main_menu_kb(lang), parse_mode="HTML")
+    await release_ai_action_lock(db, message.from_user.id, action_key)
     await state.clear()
-
-
-

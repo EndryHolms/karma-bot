@@ -1,4 +1,4 @@
-import time
+﻿import time
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
@@ -12,6 +12,7 @@ class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, rate_limit: float = 3.0):
         self.rate_limit = rate_limit
         self.ai_cache: Dict[int, float] = {}
+        self.ai_inflight: set[int] = set()
         self.ai_prefixes = (
             "menu:daily",
             "menu:relationship",
@@ -44,11 +45,17 @@ class ThrottlingMiddleware(BaseMiddleware):
         current_time = time.monotonic()
         last_time = self.ai_cache.get(user_id, 0.0)
 
-        if current_time - last_time < self.rate_limit:
+        if user_id in self.ai_inflight or current_time - last_time < self.rate_limit:
             db = data.get("db")
             lang = await get_user_language(db, user_id) if db else "uk"
             await event.answer(get_text(lang, "magic_wait"), show_alert=True)
             return None
 
         self.ai_cache[user_id] = current_time
-        return await handler(event, data)
+        self.ai_inflight.add(user_id)
+        try:
+            return await handler(event, data)
+        finally:
+            self.ai_inflight.discard(user_id)
+
+
