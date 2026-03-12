@@ -1,6 +1,7 @@
 ﻿import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any
 
 import pytz
 from aiogram import Bot
@@ -79,6 +80,8 @@ _HOROSCOPE_SIGNS = {
 }
 
 _HOROSCOPE_LANGS = ("uk", "en", "ru")
+_GENERATION_RETRY_DELAYS = (0, 30, 90)
+_DELIVERY_LOCK_STALE_MINUTES = 180
 
 
 def _localized(mapping: dict[str, str], lang: str) -> str:
@@ -121,8 +124,8 @@ async def _mark_monthly_reminder_sent(db: firestore.Client, user_id: str, month_
     await asyncio.to_thread(_write_sync)
 
 
-async def _get_cached_horoscope_payload(db: firestore.Client, date_key: str) -> dict | None:
-    def _read_sync() -> dict | None:
+async def _get_cached_horoscope_payload(db: firestore.Client, date_key: str) -> dict[str, dict[str, str]] | None:
+    def _read_sync() -> dict[str, dict[str, str]] | None:
         snap = _daily_horoscope_doc(db, date_key).get()
         if not snap.exists:
             return None
@@ -133,12 +136,88 @@ async def _get_cached_horoscope_payload(db: firestore.Client, date_key: str) -> 
     return await asyncio.to_thread(_read_sync)
 
 
-async def _store_cached_horoscope_payload(db: firestore.Client, date_key: str, payload: dict) -> None:
+async def _store_cached_horoscope_payload(db: firestore.Client, date_key: str, payload: dict[str, dict[str, str]]) -> None:
     def _write_sync() -> None:
         _daily_horoscope_doc(db, date_key).set(
             {
                 "payload": payload,
                 "created_at": firestore.SERVER_TIMESTAMP,
+                "generation_error": firestore.DELETE_FIELD,
+            },
+            merge=True,
+        )
+
+    await asyncio.to_thread(_write_sync)
+
+
+async def _set_generation_error(db: firestore.Client, date_key: str, message: str, attempt: int) -> None:
+    def _write_sync() -> None:
+        _daily_horoscope_doc(db, date_key).set(
+            {
+                "generation_error": message,
+                "generation_attempt": attempt,
+                "generation_failed_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+
+    await asyncio.to_thread(_write_sync)
+
+
+async def _claim_delivery(db: firestore.Client, date_key: str, now: datetime) -> bool:
+    def _tx_sync() -> bool:
+        ref = _daily_horoscope_doc(db, date_key)
+        now_iso = now.isoformat()
+        stale_before_iso = (now - timedelta(minutes=_DELIVERY_LOCK_STALE_MINUTES)).isoformat()
+
+        @firestore.transactional
+        def _run(transaction: firestore.Transaction) -> bool:
+            snap = ref.get(transaction=transaction)
+            data = snap.to_dict() or {}
+
+            if data.get("delivery_completed_at"):
+                return False
+
+            started_at = data.get("delivery_started_at")
+            if started_at and isinstance(started_at, str) and started_at > stale_before_iso:
+                return False
+
+            transaction.set(
+                ref,
+                {
+                    "delivery_started_at": now_iso,
+                    "delivery_error": firestore.DELETE_FIELD,
+                },
+                merge=True,
+            )
+            return True
+
+        transaction = db.transaction()
+        return _run(transaction)
+
+    return await asyncio.to_thread(_tx_sync)
+
+
+async def _mark_delivery_completed(db: firestore.Client, date_key: str, sent_count: int) -> None:
+    def _write_sync() -> None:
+        _daily_horoscope_doc(db, date_key).set(
+            {
+                "delivery_completed_at": datetime.utcnow().isoformat(),
+                "delivery_sent_count": sent_count,
+                "delivery_error": firestore.DELETE_FIELD,
+            },
+            merge=True,
+        )
+
+    await asyncio.to_thread(_write_sync)
+
+
+async def _mark_delivery_error(db: firestore.Client, date_key: str, message: str) -> None:
+    def _write_sync() -> None:
+        _daily_horoscope_doc(db, date_key).set(
+            {
+                "delivery_error": message,
+                "delivery_failed_at": datetime.utcnow().isoformat(),
             },
             merge=True,
         )
@@ -177,7 +256,13 @@ def _extract_language_block(raw_text: str, lang: str) -> str:
         return ""
     start += len(marker)
     remainder = raw_text[start:].lstrip()
-    next_positions = [pos for other in _HOROSCOPE_LANGS if other != lang for pos in [remainder.find(f"LANG:{other}")] if pos != -1]
+    next_positions = []
+    for other in _HOROSCOPE_LANGS:
+        if other == lang:
+            continue
+        pos = remainder.find(f"LANG:{other}")
+        if pos != -1:
+            next_positions.append(pos)
     end = min(next_positions) if next_positions else len(remainder)
     return remainder[:end].strip()
 
@@ -186,9 +271,8 @@ def _build_language_payload(block: str, lang: str) -> dict[str, str]:
     lines = [line.strip() for line in block.splitlines() if line.strip()]
     full_text = "\n\n".join(lines)
     payload: dict[str, str] = {"all": full_text}
-    sign_names = _HOROSCOPE_SIGNS[lang]
 
-    for key, name in sign_names.items():
+    for key, name in _HOROSCOPE_SIGNS[lang].items():
         matched_line = next((line for line in lines if name in line and (" - " in line or " — " in line)), "")
         payload[key] = matched_line or full_text
 
@@ -205,30 +289,32 @@ def _parse_multilang_horoscope(raw_text: str) -> dict[str, dict[str, str]]:
     return payload
 
 
-async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model, date_key: str) -> dict[str, dict[str, str]] | None:
+async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: Any, date_key: str) -> dict[str, dict[str, str]] | None:
     cached = await _get_cached_horoscope_payload(db, date_key)
     if cached:
         return cached
 
     prompt = _build_horoscope_prompt()
-    try:
-        response = await asyncio.to_thread(tarot_model.generate_content, prompt)
-        raw_text = getattr(response, "text", "").strip()
-    except Exception as exc:
-        logging.error("Horoscope generation failed: %s", exc)
-        return None
+    last_error = ""
+    for attempt, delay_seconds in enumerate(_GENERATION_RETRY_DELAYS, start=1):
+        if delay_seconds:
+            await asyncio.sleep(delay_seconds)
 
-    if not raw_text:
-        return None
+        try:
+            response = await asyncio.to_thread(tarot_model.generate_content, prompt)
+            raw_text = getattr(response, "text", "").strip()
+            if not raw_text:
+                raise ValueError("Gemini returned empty horoscope text")
 
-    try:
-        payload = _parse_multilang_horoscope(raw_text)
-    except Exception as exc:
-        logging.error("Horoscope parsing failed: %s", exc)
-        return None
+            payload = _parse_multilang_horoscope(raw_text)
+            await _store_cached_horoscope_payload(db, date_key, payload)
+            return payload
+        except Exception as exc:
+            last_error = str(exc)
+            logging.error("Horoscope generation attempt %s failed: %s", attempt, exc)
+            await _set_generation_error(db, date_key, last_error, attempt)
 
-    await _store_cached_horoscope_payload(db, date_key, payload)
-    return payload
+    return None
 
 
 async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
@@ -276,7 +362,7 @@ async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
     logging.info("Monthly card reminders sent to %s users", count)
 
 
-async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
+async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any):
     logging.info("Starting daily horoscope generation and broadcast")
 
     tz = pytz.timezone("Europe/Kyiv")
@@ -288,41 +374,56 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model):
     if not payload:
         return
 
+    claimed = await _claim_delivery(db, today_key, now)
+    if not claimed:
+        logging.info("Daily horoscope delivery already completed or currently locked for %s", today_key)
+        return
+
     me = await bot.get_me()
     bot_link = f"https://t.me/{me.username}" if me.username else None
 
     users_ref = db.collection("users").stream()
     count = 0
 
-    for doc in users_ref:
-        user_data = doc.to_dict() or {}
-        user_id = doc.id
-        lang = user_data.get("language", "uk")
-        if lang not in payload:
-            lang = "uk"
-        if user_data.get("horoscope_enabled", True) is False:
-            continue
+    try:
+        for doc in users_ref:
+            user_data = doc.to_dict() or {}
+            user_id = doc.id
+            lang = user_data.get("language", "uk")
+            if lang not in payload:
+                lang = "uk"
+            if user_data.get("horoscope_enabled", True) is False:
+                continue
+            if user_data.get("last_horoscope_share_date") == today_key:
+                continue
 
-        zodiac_pref = user_data.get("zodiac_sign", "all")
-        lang_payload = payload[lang]
-        text_to_send = lang_payload.get(zodiac_pref, lang_payload["all"])
-        title = _localized(_HOROSCOPE_TITLE, lang).format(date=today_date)
-        final_message = f"{title}\n\n{text_to_send}"
-        if bot_link:
-            final_message = f"{final_message}\n\n{_localized(_HOROSCOPE_SOURCE, lang).format(link=bot_link)}"
+            zodiac_pref = user_data.get("zodiac_sign", "all")
+            lang_payload = payload[lang]
+            text_to_send = lang_payload.get(zodiac_pref, lang_payload["all"])
+            title = _localized(_HOROSCOPE_TITLE, lang).format(date=today_date)
+            final_message = f"{title}\n\n{text_to_send}"
+            if bot_link:
+                final_message = f"{final_message}\n\n{_localized(_HOROSCOPE_SOURCE, lang).format(link=bot_link)}"
 
-        try:
-            await bot.send_message(chat_id=user_id, text=final_message, parse_mode="HTML")
-            await _store_share_text(db, user_id, final_message, today_key)
-            await bot.send_message(
-                chat_id=user_id,
-                text=_localized(_HOROSCOPE_FOLLOWUP, lang),
-                reply_markup=main_menu_kb(lang),
-                parse_mode="HTML",
-            )
-            count += 1
-            await asyncio.sleep(0.1)
-        except Exception as exc:
-            logging.error("Horoscope send failed for %s: %s", user_id, exc)
+            try:
+                await bot.send_message(chat_id=user_id, text=final_message, parse_mode="HTML")
+                await _store_share_text(db, user_id, final_message, today_key)
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=_localized(_HOROSCOPE_FOLLOWUP, lang),
+                    reply_markup=main_menu_kb(lang),
+                    parse_mode="HTML",
+                )
+                count += 1
+                await asyncio.sleep(0.1)
+            except TelegramForbiddenError:
+                continue
+            except Exception as exc:
+                logging.error("Horoscope send failed for %s: %s", user_id, exc)
+
+        await _mark_delivery_completed(db, today_key, count)
+    except Exception as exc:
+        await _mark_delivery_error(db, today_key, str(exc))
+        raise
 
     logging.info("Daily horoscope sent to %s users", count)
