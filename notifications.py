@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -82,6 +82,40 @@ _HOROSCOPE_SIGNS = {
 _HOROSCOPE_LANGS = ("uk", "en", "ru")
 _GENERATION_RETRY_DELAYS = (0, 30, 90)
 _DELIVERY_LOCK_STALE_MINUTES = 180
+
+# Список тем для урізноманітнення гороскопів
+_DAILY_THEMES = [
+    "день космічної іронії та побутового абсурду",
+    "день агресивної мотивації від Всесвіту",
+    "день екзистенційної кризи та холодного чаю",
+    "день несподіваних фінансових пророцтв",
+    "день, коли інтуїція працює через раз",
+    "день розбитих ілюзій та нових надій",
+    "день, коли доля грає з вами в гру 'ану вгадай'",
+    "день офісного дзену та паперового хаосу",
+    "день, коли Всесвіт поводиться як токсичний колишній",
+    "день тотального ретрограду всього на світі",
+    "день, коли ваш внутрішній критик пішов у відпустку",
+    "день кармічних боргів та дрібної решти",
+    "день, коли навіть кавомашина натякає на зміни",
+    "день великих планів і дуже маленьких кроків",
+    "день космічного сарказму щодо ваших дедлайнів",
+    "день, коли треба просто плисти за течією, навіть якщо це течія борщу",
+    "день вибору між 'треба' та 'не хочу'",
+    "день, коли зорі шепочуть дурниці",
+    "день зустрічі з власною лінню віч-на-віч",
+    "день, коли кожна дрібниця має прихований зміст (або ні)",
+    "день, коли 'пізніше' настало вже зараз",
+]
+
+
+def _get_daily_theme(date_key: str) -> str:
+    # Вибираємо тему на основі дати (стабільно для одного дня)
+    try:
+        day_val = int(date_key.split("-")[-1])
+        return _DAILY_THEMES[day_val % len(_DAILY_THEMES)]
+    except (IndexError, ValueError):
+        return _DAILY_THEMES[0]
 
 
 def _localized(mapping: dict[str, str], lang: str) -> str:
@@ -225,27 +259,32 @@ async def _mark_delivery_error(db: firestore.Client, date_key: str, message: str
     await asyncio.to_thread(_write_sync)
 
 
-def _build_horoscope_prompt() -> str:
+def _build_horoscope_prompt(theme: str) -> str:
     return (
-        "Generate a daily horoscope for all 12 zodiac signs in exactly 3 sections: LANG:uk, LANG:en, LANG:ru. "
-        "Each section must contain exactly 12 horoscope lines and no extra introduction or conclusion. "
-        "Tone: witty, ironic, life-like, with sarcasm about work, money, weather, and relationships. "
-        "Use exactly this format inside each language section: zodiac emoji, localized sign name, space, hyphen, space, one sentence. "
-        "Put one empty line between lines. "
-        "Use these exact sign names for each language. "
-        "For LANG:uk use: Овен, Телець, Близнюки, Рак, Лев, Діва, Терези, Скорпіон, Стрілець, Козеріг, Водолій, Риби. "
-        "For LANG:en use: Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces. "
-        "For LANG:ru use: Овен, Телец, Близнецы, Рак, Лев, Дева, Весы, Скорпион, Стрелец, Козерог, Водолей, Рыбы. "
-        "Return only this structure:\n\n"
-        "LANG:uk\n"
-        "♈ Овен - ...\n\n"
-        "... 12 lines total ...\n\n"
-        "LANG:en\n"
-        "♈ Aries - ...\n\n"
-        "... 12 lines total ...\n\n"
-        "LANG:ru\n"
-        "♈ Овен - ...\n\n"
-        "... 12 lines total ..."
+        f"Generate a daily horoscope for all 12 zodiac signs in exactly 3 sections: LANG:uk, LANG:en, LANG:ru. "
+        f"The overall theme for today is: {theme}. "
+        f"Tone: witty, ironic, life-like, with sharp sarcasm. Use unexpected metaphors. "
+        f"IMPORTANT: Avoid boring zodiac clichés! Leo is NOT just about royalty/crowns. "
+        f"Taurus is NOT just about being stubborn. Pisces is NOT just about dreams. "
+        f"Describe their day using mundane objects (cold coffee, Wi-Fi signals, broken zippers, IKEA furniture, tax reports). "
+        f"The text for each sign must be exactly ONE medium-length sentence, punchy and unique. "
+        f"Each language section must contain exactly 12 horoscope lines and no extra introduction or conclusion. "
+        f"Use exactly this format inside each language section: zodiac emoji, localized sign name, space, hyphen, space, the sentence. "
+        f"Put one empty line between lines. "
+        f"Use these exact sign names for each language. "
+        f"For LANG:uk use: Овен, Телець, Близнюки, Рак, Лев, Діва, Терези, Скорпіон, Стрілець, Козеріг, Водолій, Риби. "
+        f"For LANG:en use: Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces. "
+        f"For LANG:ru use: Овен, Телец, Близнецы, Рак, Лев, Дева, Весы, Скорпион, Стрелец, Козерог, Водолей, Рыбы. "
+        f"Return only this structure:\n\n"
+        f"LANG:uk\n"
+        f"♈ Овен - ...\n\n"
+        f"... 12 lines total ...\n\n"
+        f"LANG:en\n"
+        f"♈ Aries - ...\n\n"
+        f"... 12 lines total ...\n\n"
+        f"LANG:ru\n"
+        f"♈ Овен - ...\n\n"
+        f"... 12 lines total ..."
     )
 
 
@@ -294,7 +333,8 @@ async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: 
     if cached:
         return cached
 
-    prompt = _build_horoscope_prompt()
+    theme = _get_daily_theme(date_key)
+    prompt = _build_horoscope_prompt(theme)
     last_error = ""
     for attempt, delay_seconds in enumerate(_GENERATION_RETRY_DELAYS, start=1):
         if delay_seconds:
