@@ -259,10 +259,13 @@ async def _mark_delivery_error(db: firestore.Client, date_key: str, message: str
     await asyncio.to_thread(_write_sync)
 
 
-def _build_horoscope_prompt(theme: str) -> str:
+def _build_horoscope_prompt(day_configs: list[dict[str, str]]) -> str:
+    # day_configs contains list of {"date": "YYYY-MM-DD", "theme": "...", "label": "DD.MM"}
+    requests_str = "\n".join([f"DATE:{c['date']} | THEME: {c['theme']}" for c in day_configs])
+    
     return (
-        f"Generate a daily horoscope for all 12 zodiac signs in exactly 3 sections: LANG:uk, LANG:en, LANG:ru. "
-        f"The overall theme for today is: {theme}. "
+        f"Generate daily horoscopes for the following dates and themes:\n{requests_str}\n\n"
+        f"For EACH date, provide 3 sections: LANG:uk, LANG:en, LANG:ru. "
         f"Tone: witty, ironic, life-like, with sharp sarcasm. Use unexpected metaphors. "
         f"IMPORTANT: Avoid boring zodiac clichés! Leo is NOT just about royalty/crowns. "
         f"Taurus is NOT just about being stubborn. Pisces is NOT just about dreams. "
@@ -275,16 +278,15 @@ def _build_horoscope_prompt(theme: str) -> str:
         f"For LANG:uk use: Овен, Телець, Близнюки, Рак, Лев, Діва, Терези, Скорпіон, Стрілець, Козеріг, Водолій, Риби. "
         f"For LANG:en use: Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces. "
         f"For LANG:ru use: Овен, Телец, Близнецы, Рак, Лев, Дева, Весы, Скорпион, Стрелец, Козерог, Водолей, Рыбы. "
-        f"Return only this structure:\n\n"
+        f"Structure your entire response as a sequence of date blocks:\n\n"
+        f"DATE:YYYY-MM-DD\n"
         f"LANG:uk\n"
         f"♈ Овен - ...\n\n"
-        f"... 12 lines total ...\n\n"
         f"LANG:en\n"
         f"♈ Aries - ...\n\n"
-        f"... 12 lines total ...\n\n"
         f"LANG:ru\n"
         f"♈ Овен - ...\n\n"
-        f"... 12 lines total ..."
+        f"(repeat for other dates)"
     )
 
 
@@ -293,9 +295,9 @@ def _extract_language_block(raw_text: str, lang: str) -> str:
     start = raw_text.find(marker)
     if start == -1:
         return ""
-    start += len(marker)
-    remainder = raw_text[start:].lstrip()
-    next_positions = []
+    start_pos: int = start + len(marker)
+    remainder: str = raw_text[start_pos:].lstrip()
+    next_positions: list[int] = []
     for other in _HOROSCOPE_LANGS:
         if other == lang:
             continue
@@ -317,7 +319,6 @@ def _build_language_payload(block: str, lang: str) -> dict[str, str]:
 
     return payload
 
-
 def _parse_multilang_horoscope(raw_text: str) -> dict[str, dict[str, str]]:
     payload: dict[str, dict[str, str]] = {}
     for lang in _HOROSCOPE_LANGS:
@@ -328,13 +329,66 @@ def _parse_multilang_horoscope(raw_text: str) -> dict[str, dict[str, str]]:
     return payload
 
 
+def _parse_batch_horoscope(raw_text: str) -> dict[str, dict[str, dict[str, str]]]:
+    # Returns {date_key: payload}
+    results: dict[str, dict[str, dict[str, str]]] = {}
+    blocks = raw_text.split("DATE:")
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+        
+        # First line should be the date
+        lines = block.splitlines()
+        if not lines:
+            continue
+            
+        date_key = lines[0].strip()
+        # Basic date format check YYYY-MM-DD
+        if len(date_key) < 10 or "-" not in date_key:
+            continue
+            
+        content = "\n".join(lines[1:])
+        
+        try:
+            payload = _parse_multilang_horoscope(content)
+            results[date_key] = payload
+        except Exception as exc:
+            logging.warning("Failed to parse horoscope block for %s: %s", date_key, exc)
+    
+    return results
+
+
 async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: Any, date_key: str) -> dict[str, dict[str, str]] | None:
+    # Attempt to get from cache first
     cached = await _get_cached_horoscope_payload(db, date_key)
     if cached:
         return cached
 
-    theme = _get_daily_theme(date_key)
-    prompt = _build_horoscope_prompt(theme)
+    # Not in cache, let's generate a batch of 7 days starting from today to save credits
+    logging.info("Generating batch horoscopes starting from %s", date_key)
+    
+    start_dt = datetime.strptime(date_key, "%Y-%m-%d")
+    batch_configs = []
+    for i in range(7):
+        target_dt = start_dt + timedelta(days=i)
+        t_key = target_dt.strftime("%Y-%m-%d")
+        # Check if already cached (optional but good for efficiency)
+        if i > 0:
+            existing = await _get_cached_horoscope_payload(db, t_key)
+            if existing:
+                continue
+        
+        batch_configs.append({
+            "date": t_key,
+            "theme": _get_daily_theme(t_key)
+        })
+
+    if not batch_configs:
+        return await _get_cached_horoscope_payload(db, date_key)
+
+    prompt = _build_horoscope_prompt(batch_configs)
+    
     last_error = ""
     for attempt, delay_seconds in enumerate(_GENERATION_RETRY_DELAYS, start=1):
         if delay_seconds:
@@ -344,14 +398,19 @@ async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: 
             response = await asyncio.to_thread(tarot_model.generate_content, prompt)
             raw_text = getattr(response, "text", "").strip()
             if not raw_text:
-                raise ValueError("Gemini returned empty horoscope text")
+                raise ValueError("Gemini returned empty batch text")
 
-            payload = _parse_multilang_horoscope(raw_text)
-            await _store_cached_horoscope_payload(db, date_key, payload)
-            return payload
+            batch_results = _parse_batch_horoscope(raw_text)
+            if not batch_results:
+                raise ValueError("Could not parse any dates from batch")
+
+            for res_date, res_payload in batch_results.items():
+                await _store_cached_horoscope_payload(db, res_date, res_payload)
+            
+            return batch_results.get(date_key)
         except Exception as exc:
             last_error = str(exc)
-            logging.error("Horoscope generation attempt %s failed: %s", attempt, exc)
+            logging.error("Batch horoscope generation attempt %s failed: %s", attempt, exc)
             await _set_generation_error(db, date_key, last_error, attempt)
 
     return None
