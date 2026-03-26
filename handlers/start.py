@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from urllib.parse import urlencode
 
 from aiogram import F, Router
@@ -15,6 +15,7 @@ from firebase_db import (
     update_horoscope_enabled,
     update_user_language,
     update_user_zodiac,
+    log_chat_message,
 )
 from keyboards import (
     CB_BACK_MENU,
@@ -318,12 +319,13 @@ async def process_language_selection(callback: CallbackQuery, db: firestore.Clie
     img_welcome = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png"
 
     try:
-        await callback.message.answer_photo(
-            photo=img_welcome,
-            caption=welcome_text,
-            reply_markup=main_menu_kb(lang),
-            parse_mode="HTML",
-        )
+            await callback.message.answer_photo(
+                photo=img_welcome,
+                caption=welcome_text,
+                reply_markup=main_menu_kb(lang),
+                parse_mode="HTML",
+            )
+            await log_chat_message(db, callback.from_user.id, "bot", welcome_text)
     except Exception as exc:
         logging.error("Welcome image send failed: %s", exc)
         await callback.message.answer(

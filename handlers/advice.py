@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import os
@@ -18,6 +18,7 @@ from firebase_db import (
     get_balance,
     get_user_language,
     increment_balance,
+    log_chat_message,
     release_ai_action_lock,
 )
 from handlers.payment import send_stars_invoice
@@ -199,6 +200,7 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
     await message.answer_photo(photo=current_img, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
 
     await message.answer(text, parse_mode="HTML")
+    await log_chat_message(db, message.from_user.id, "bot", text)
     await message.answer(get_text(lang, "more_action_btn"), reply_markup=main_menu_kb(lang), parse_mode="HTML")
     await release_ai_action_lock(db, message.from_user.id, action_key)
     await state.clear()

@@ -10,7 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from firebase_admin import firestore
 
-from firebase_db import get_referred_users, get_user, get_user_stats, set_balance
+from firebase_db import get_chat_history, get_referred_users, get_user, get_user_stats, set_balance
 
 router = Router()
 
@@ -19,6 +19,7 @@ CB_ADMIN_USER = "admin:user"
 CB_ADMIN_BACK = "admin:back"
 CB_ADMIN_SET_BALANCE = "admin:set_balance"
 CB_ADMIN_REFERRALS = "admin:referrals"
+CB_ADMIN_HISTORY = "admin:history"
 
 _admin_env = os.getenv("ADMIN_IDS", "469764985")
 ADMIN_IDS = {int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()}
@@ -46,6 +47,7 @@ def _user_card_kb(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Запрошені користувачі", callback_data=f"{CB_ADMIN_REFERRALS}:{user_id}")],
+            [InlineKeyboardButton(text="Історія переписки", callback_data=f"{CB_ADMIN_HISTORY}:{user_id}")],
             [InlineKeyboardButton(text="Змінити баланс", callback_data=f"{CB_ADMIN_SET_BALANCE}:{user_id}")],
             [InlineKeyboardButton(text="Назад", callback_data=CB_ADMIN_BACK)],
         ]
@@ -309,3 +311,35 @@ async def admin_set_balance_value(message: Message, state: FSMContext, db: fires
         reply_markup=_user_card_kb(int(target_user_id)),
         parse_mode="HTML",
     )
+
+
+@router.callback_query(F.data.startswith(f"{CB_ADMIN_HISTORY}:"))
+async def admin_chat_history(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not _is_admin(callback.from_user.id if callback.from_user else None):
+        return
+
+    if not callback.message:
+        await callback.answer()
+        return
+
+    parts = callback.data.split(":")
+    target_user_id = int(parts[-1])
+
+    history = await get_chat_history(db, target_user_id, limit=20)
+    if not history:
+        await callback.answer("Історія переписки порожня або ще не створена.", show_alert=True)
+        return
+
+    # Форматуємо історію (останні повідомлення будуть в кінці)
+    history.reverse()
+
+    lines = [f"<b>Історія переписки (останні 20)</b>\nUser ID: <code>{target_user_id}</code>\n"]
+    for msg in history:
+        role = "👤 Юзер" if msg["role"] == "user" else "🤖 Karma"
+        raw_text = msg["text"]
+        text = (raw_text[:150] + "...") if len(raw_text) > 150 else raw_text
+        lines.append(f"<b>{role}:</b>\n{text}\n")
+
+    text = "\n".join(lines)
+    await callback.message.edit_text(text, reply_markup=_user_back_kb(target_user_id), parse_mode="HTML")
+    await callback.answer()

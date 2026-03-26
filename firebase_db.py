@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -434,7 +434,37 @@ async def release_daily_card_slot(db: firestore.Client, user_id: int, date_key: 
         transaction = db.transaction()
         _run(transaction)
 
-    await asyncio.to_thread(_tx_sync)
+
+async def log_chat_message(db: firestore.Client, user_id: int, role: str, text: str) -> None:
+    def _log_sync() -> None:
+        ref = _users_col(db).document(str(user_id)).collection("chat_history").document()
+        ref.set(
+            {
+                "role": role,
+                "text": text,
+                "timestamp": firestore.SERVER_TIMESTAMP,
+            }
+        )
+
+    await asyncio.to_thread(_log_sync)
+
+
+async def get_chat_history(db: firestore.Client, user_id: int, limit: int = 20) -> list[Dict[str, Any]]:
+    def _get_sync() -> list[Dict[str, Any]]:
+        history: list[Dict[str, Any]] = []
+        query = (
+            _users_col(db)
+            .document(str(user_id))
+            .collection("chat_history")
+            .order_by("timestamp", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        for snap in query.stream():
+            data = snap.to_dict() or {}
+            history.append(data)
+        return history
+
+    return await asyncio.to_thread(_get_sync)
 
 async def claim_ai_action_lock(db: firestore.Client, user_id: int, action_key: str) -> bool:
     def _tx_sync() -> bool:

@@ -8,7 +8,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError
 from firebase_admin import firestore
 
-from keyboards import main_menu_kb
+from firebase_db import init_firestore, log_chat_message
 
 _MONTHLY_REMINDER_TEXT = {
     "uk": "✨ <i>Всесвіт давно не чув твого запиту...</i>\n\nТи вже колись відкривав свою Карту Дня, але давно не повертався. Можливо, зараз саме час знову подивитися, які енергії тебе супроводжують 👇",
@@ -506,6 +506,7 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any)
 
             try:
                 await bot.send_message(chat_id=user_id, text=final_message, parse_mode="HTML")
+                await log_chat_message(db, int(user_id), "bot", final_message)
                 await _store_share_text(db, user_id, final_message, today_key)
                 await bot.send_message(
                     chat_id=user_id,

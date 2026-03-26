@@ -1,10 +1,11 @@
-﻿import time
+import asyncio
+import time
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
-from firebase_db import get_user_language
+from firebase_db import get_user_language, log_chat_message
 from lexicon import get_text
 
 
@@ -59,3 +60,23 @@ class ThrottlingMiddleware(BaseMiddleware):
             self.ai_inflight.discard(user_id)
 
 
+class ChatLoggingMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        if isinstance(event, Message) and event.text:
+            db = data.get("db")
+            if db and event.from_user:
+                asyncio.create_task(
+                    log_chat_message(
+                        db=db,
+                        user_id=event.from_user.id,
+                        role="user",
+                        text=event.text,
+                    )
+                )
+
+        return await handler(event, data)

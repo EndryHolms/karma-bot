@@ -26,6 +26,7 @@ from firebase_db import (
     get_user_language,
     grant_referral_bonus_for_daily_card,
     increment_balance,
+    log_chat_message,
     release_ai_action_lock,
     release_daily_card_slot,
 )
@@ -294,6 +295,7 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
             current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
             await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
             await _send_long(callback.message, text, reply_markup=main_menu_kb(lang), lang=lang)
+            await log_chat_message(db, callback.from_user.id, "bot", text)
 
             if referral_bonus_granted_to:
                 ref_lang = await get_user_language(db, referral_bonus_granted_to)
@@ -412,6 +414,7 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
 
     await message.answer_photo(photo=img_to_send, caption=get_text(lang, "cards_on_table"), parse_mode="HTML")
     await _send_long(message, text, reply_markup=main_menu_kb(lang), lang=lang)
+    await log_chat_message(db, message.from_user.id, "bot", text)
     if action_key:
         await release_ai_action_lock(db, message.from_user.id, action_key)
     await state.clear()
