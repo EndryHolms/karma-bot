@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import os
@@ -67,18 +67,18 @@ IMAGES_CAREER = {
 }
 
 _REFERRAL_BONUS_NOTICE = {
-    "uk": "рџЋЃ <b>Р‘РѕРЅСѓСЃ Р·Р° РґСЂСѓРіР°!</b> РўРІС–Р№ РґСЂСѓРі РІС–РґРєСЂРёРІ СЃРІРѕСЋ РїРµСЂС€Сѓ РљР°СЂС‚Сѓ Р”РЅСЏ, С‚РѕР¶ С‚Рё РѕС‚СЂРёРјР°РІ <b>{bonus} в­ђ</b>.",
-    "en": "рџЋЃ <b>Friend bonus!</b> Your friend opened their first Card of the Day, so you received <b>{bonus} в­ђ</b>.",
-    "ru": "рџЋЃ <b>Р‘РѕРЅСѓСЃ Р·Р° РґСЂСѓРіР°!</b> РўРІРѕР№ РґСЂСѓРі РѕС‚РєСЂС‹Р» СЃРІРѕСЋ РїРµСЂРІСѓСЋ РљР°СЂС‚Сѓ Р”РЅСЏ, РїРѕСЌС‚РѕРјСѓ С‚С‹ РїРѕР»СѓС‡РёР» <b>{bonus} в­ђ</b>.",
+    "uk": "🎁 <b>Бонус за друга!</b> Твій друг відкрив свою першу Карту Дня, тож ти отримав <b>{bonus} ⭐</b>.",
+    "en": "🎁 <b>Friend bonus!</b> Your friend opened their first Card of the Day, so you received <b>{bonus} ⭐</b>.",
+    "ru": "🎁 <b>Бонус за друга!</b> Твой друг открыл свою первую Карту Дня, поэтому ты получил <b>{bonus} ⭐</b>.",
 }
 
 
 HEADING_GUIDE = {
     "uk": {
-        "cards": "Р С™Р В°РЎР‚РЎвЂљР С‘",
-        "reading": "Р СћР Р†РЎвЂ“Р в„– РЎР‚Р С•Р В·Р С”Р В»Р В°Р Т‘",
-        "advice": "Р СџР С•РЎР‚Р В°Р Т‘Р В° Р Р†РЎвЂ“Р Т‘ Karma",
-        "affirmation": "Р С’РЎвЂћРЎвЂ“РЎР‚Р СР В°РЎвЂ РЎвЂ“РЎРЏ",
+        "cards": "Карти",
+        "reading": "Твій розклад",
+        "advice": "Порада від Karma",
+        "affirmation": "Афірмація",
     },
     "en": {
         "cards": "Cards",
@@ -87,10 +87,10 @@ HEADING_GUIDE = {
         "affirmation": "Affirmation",
     },
     "ru": {
-        "cards": "Р С™Р В°РЎР‚РЎвЂљРЎвЂ№",
-        "reading": "Р СћР Р†Р С•Р в„– РЎР‚Р В°РЎРѓР С”Р В»Р В°Р Т‘",
-        "advice": "Р РЋР С•Р Р†Р ВµРЎвЂљ Р С•РЎвЂљ Karma",
-        "affirmation": "Р С’РЎвЂћРЎвЂћР С‘РЎР‚Р СР В°РЎвЂ Р С‘РЎРЏ",
+        "cards": "Карты",
+        "reading": "Твой расклад",
+        "advice": "Совет от Karma",
+        "affirmation": "Аффирмация",
     },
 }
 
@@ -110,13 +110,13 @@ def _tarot_format_prompt(lang: str, target_language: str) -> str:
         f"Use Telegram HTML only. Do not use Markdown. "
         f"Keep the emojis exactly as shown. Keep exactly one empty line after each heading and one empty line between blocks. "
         f"Return the answer in exactly this structure:\n\n"
-        f"СЂСџР‹Т‘ <b>{headings['cards']}:</b>\n\n"
+        f"🪄 <b>{headings['cards']}:</b>\n\n"
         f"[text]\n\n"
-        f"СЂСџвЂРѓ <b>{headings['reading']}:</b>\n\n"
+        f"🧘 <b>{headings['reading']}:</b>\n\n"
         f"[text]\n\n"
-        f"РІСљРЃ <b>{headings['advice']}:</b>\n\n"
+        f"🕯 <b>{headings['advice']}:</b>\n\n"
         f"[text]\n\n"
-        f"СЂСџРЉРЉ <b>{headings['affirmation']}:</b>\n\n"
+        f"✨ <b>{headings['affirmation']}:</b>\n\n"
         f"[text]\n\n"
         f"The affirmation must also be fully in {target_language}."
     )
@@ -353,9 +353,9 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
     price = data.get("price", 1)
 
     topic_by_lang = {
-        "uk": {"relationship": "РЎРѓРЎвЂљР С•РЎРѓРЎС“Р Р…Р С”Р С‘", "career": "Р С”Р В°РЎР‚'РЎвЂќРЎР‚Р В°"},
+        "uk": {"relationship": "стосунки", "career": "кар'єра"},
         "en": {"relationship": "relationships", "career": "career"},
-        "ru": {"relationship": "Р С•РЎвЂљР Р…Р С•РЎв‚¬Р ВµР Р…Р С‘РЎРЏ", "career": "Р С”Р В°РЎР‚РЎРЉР ВµРЎР‚Р В°"},
+        "ru": {"relationship": "отношения", "career": "карьера"},
     }
     topic = topic_by_lang.get(lang, topic_by_lang["uk"]).get(reading_key, topic_by_lang["uk"]["career"])
     wait_text = get_text(lang, "loading_love_cards") if reading_key == "relationship" else get_text(lang, "loading_cards")
