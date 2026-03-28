@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import os
+import signal
 import sys
+from datetime import datetime
 
 import google.generativeai as genai
 from aiohttp import web
@@ -11,6 +13,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from google.generativeai.types import HarmBlockThreshold, HarmCategory
+import pytz
 
 from config import load_settings
 from firebase_db import init_firestore
@@ -47,6 +50,9 @@ async def _run_web_server(port: int) -> None:
     finally:
         await runner.cleanup()
 
+def handle_exit(sig, frame):
+    logging.warning(f"Received signal {sig}. Shutting down bot...")
+    # Ми не виходимо тут примусово, дозволяємо asyncio завершити роботу
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -93,6 +99,20 @@ async def main() -> None:
     scheduler.add_job(send_monthly_card_reminders, trigger="cron", day=1, hour=12, minute=0, args=[bot, db])
     scheduler.add_job(send_daily_horoscope, trigger="cron", hour=9, minute=0, args=[bot, db, tarot_model])
     scheduler.start()
+
+    # Catch-up: перевірка чи не пропущено гороскоп (якщо бот стартував після 09:00)
+    tz = pytz.timezone("Europe/Kyiv")
+    now = datetime.now(tz)
+    if now.hour >= 9:
+        logging.info("It's past 09:00 AM. Checking for missed daily horoscope...")
+        asyncio.create_task(send_daily_horoscope(bot, db, tarot_model))
+
+    # Реєстрація сигналів для логування
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, handle_exit)
+        except Exception:
+            pass
 
     try:
         await dp.start_polling(bot)
