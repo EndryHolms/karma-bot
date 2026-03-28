@@ -61,7 +61,7 @@ async def main() -> None:
 
     genai.configure(api_key=settings.gemini_api_key)
 
-    model_name = "gemini-3.1-flash-lite-preview"
+    model_name = settings.primary_model_name
 
     tarot_model = genai.GenerativeModel(
         model_name=model_name,

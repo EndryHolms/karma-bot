@@ -8,7 +8,8 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError
 from firebase_admin import firestore
 
-from firebase_db import init_firestore, log_chat_message
+from firebase_db import log_chat_message
+from keyboards import main_menu_kb
 
 _MONTHLY_REMINDER_TEXT = {
     "uk": "✨ <i>Всесвіт давно не чув твого запиту...</i>\n\nТи вже колись відкривав свою Карту Дня, але давно не повертався. Можливо, зараз саме час знову подивитися, які енергії тебе супроводжують 👇",
