@@ -467,6 +467,11 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any)
 
     tz = pytz.timezone("Europe/Kyiv")
     now = datetime.now(tz)
+    
+    # Тільки якщо вже пізніше 09:00 ранку
+    if now.hour < 9:
+        return
+
     today_date = now.strftime("%d.%m")
     today_key = now.strftime("%Y-%m-%d")
 

@@ -98,6 +98,15 @@ async def main() -> None:
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     scheduler.add_job(send_monthly_card_reminders, trigger="cron", day=1, hour=12, minute=0, args=[bot, db])
     scheduler.add_job(send_daily_horoscope, trigger="cron", hour=9, minute=0, args=[bot, db, tarot_model])
+    
+    # Редундантна перевірка кожні 20 хв (Self-healing на випадок збоїв планувальника)
+    scheduler.add_job(
+        send_daily_horoscope, 
+        trigger="interval", 
+        minutes=20, 
+        args=[bot, db, tarot_model]
+    )
+    
     scheduler.start()
 
     # Catch-up: перевірка чи не пропущено гороскоп (якщо бот стартував після 09:00)
