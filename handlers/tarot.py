@@ -212,7 +212,7 @@ async def _start_paid_reading(
                 title=get_text(lang, title_key),
                 description=get_text(lang, desc_key),
                 amount_stars=price,
-                payload=f"topup:{price}",
+                payload=f"reading:{reading_key}:{price}",
             )
             return
 

@@ -131,7 +131,7 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
                 title=get_text(lang, "invoice_advice_title"),
                 description=get_text(lang, "invoice_advice_desc"),
                 amount_stars=ADVICE_PRICE,
-                payload=f"topup:{ADVICE_PRICE}",
+                payload=f"advice:{ADVICE_PRICE}",
             )
             return
 
