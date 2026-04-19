@@ -36,8 +36,8 @@ from lexicon import get_text
 
 router = Router()
 
-RELATIONSHIP_PRICE = 1
-CAREER_PRICE = 1
+RELATIONSHIP_PRICE = 75
+CAREER_PRICE = 100
 
 _admin_env = os.getenv("ADMIN_IDS", "469764985")
 ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
