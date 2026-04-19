@@ -8,8 +8,7 @@ from firebase_admin import firestore
 from firebase_db import ensure_user, increment_balance, get_user_language, claim_ai_action_lock
 from lexicon import get_text
 from keyboards import back_to_menu_kb
-from handlers.tarot import ReadingStates
-from handlers.advice import AdviceStates
+
 
 router = Router()
 
@@ -68,6 +67,7 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
     payload = sp.invoice_payload or ""
 
     if payload.startswith("reading:"):
+        from handlers.tarot import ReadingStates
         parts = payload.split(":")
         reading_key = parts[1]
         price = int(parts[2])
@@ -90,6 +90,7 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
         return
 
     elif payload.startswith("advice:"):
+        from handlers.advice import AdviceStates
         price = int(payload.split(":")[1])
         action_key = "advice"
         
