@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, LabeledPrice, Message, PreCheckoutQuery
@@ -65,6 +67,31 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
 
     lang = await get_user_language(db, message.from_user.id)
     payload = sp.invoice_payload or ""
+
+    if total_amount > 0:
+        from handlers.admin import ADMIN_IDS
+        username_str = f"@{message.from_user.username}" if message.from_user.username else "немає"
+        
+        service_name = "Невідомо"
+        if payload.startswith("reading:relationship"):
+            service_name = "Любов та стосунки"
+        elif payload.startswith("reading:career"):
+            service_name = "Гроші та Реалізація"
+        elif payload.startswith("advice:"):
+            service_name = "Порада Всесвіту"
+
+        text = (
+            f"💰 <b>Успішна оплата!</b>\n\n"
+            f"Користувач: {message.from_user.first_name} ({username_str})\n"
+            f"Послуга: <b>{service_name}</b>\n"
+            f"Сума: <b>{total_amount} ⭐</b>\n"
+            f"ID: <code>{message.from_user.id}</code>"
+        )
+        for admin_id in ADMIN_IDS:
+            try:
+                await message.bot.send_message(admin_id, text, parse_mode="HTML")
+            except Exception as e:
+                logging.error("Failed to notify admin %s: %s", admin_id, e)
 
     if payload.startswith("reading:"):
         from handlers.tarot import ReadingStates
