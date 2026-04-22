@@ -50,8 +50,8 @@ async def ensure_user(
     user_id: int,
     username: str = "",
     first_name: str = "",
-) -> None:
-    def _ensure_sync() -> None:
+) -> bool:
+    def _ensure_sync() -> bool:
         ref = _users_col(db).document(str(user_id))
         snap = ref.get()
         if not snap.exists:
@@ -63,6 +63,7 @@ async def ensure_user(
                     "joined_at": firestore.SERVER_TIMESTAMP,
                 }
             )
+            return True
         else:
             updates: Dict[str, Any] = {}
             data = snap.to_dict() or {}
@@ -72,8 +73,9 @@ async def ensure_user(
                 updates["first_name"] = first_name
             if updates:
                 ref.update(updates)
+            return False
 
-    await asyncio.to_thread(_ensure_sync)
+    return await asyncio.to_thread(_ensure_sync)
 
 
 async def get_user(db: firestore.Client, user_id: int) -> Optional[Dict[str, Any]]:

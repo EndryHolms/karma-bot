@@ -270,12 +270,27 @@ async def command_start(message: Message, db: firestore.Client) -> None:
     if not message.from_user:
         return
 
-    await ensure_user(
+    is_new = await ensure_user(
         db,
         user_id=message.from_user.id,
         username=message.from_user.username or "",
         first_name=message.from_user.first_name or "",
     )
+
+    if is_new:
+        from handlers.admin import ADMIN_IDS
+        username_str = f"@{message.from_user.username}" if message.from_user.username else "немає"
+        text = (
+            f"👤 <b>Новий користувач!</b>\n\n"
+            f"Ім'я: {message.from_user.first_name}\n"
+            f"Username: {username_str}\n"
+            f"ID: <code>{message.from_user.id}</code>"
+        )
+        for admin_id in ADMIN_IDS:
+            try:
+                await message.bot.send_message(admin_id, text, parse_mode="HTML")
+            except Exception as e:
+                logging.error("Failed to notify admin %s: %s", admin_id, e)
 
     referrer_id = _extract_referrer_id(message)
     if referrer_id:
