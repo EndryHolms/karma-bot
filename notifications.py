@@ -310,6 +310,21 @@ def _extract_language_block(raw_text: str, lang: str) -> str:
 
 
 def _build_language_payload(block: str, lang: str) -> dict[str, str]:
+    if lang == "uk":
+        # Gemini sometimes hallucinates Russian spellings in the Ukrainian text
+        corrections = {
+            "Стрелец": "Стрілець",
+            "Телец": "Телець",
+            "Близнецы": "Близнюки",
+            "Дева": "Діва",
+            "Весы": "Терези",
+            "Козерог": "Козеріг",
+            "Водолей": "Водолій",
+            "Рыбы": "Риби"
+        }
+        for wrong, right in corrections.items():
+            block = block.replace(wrong, right)
+
     lines = [line.strip() for line in block.splitlines() if line.strip()]
     full_text = "\n\n".join(lines)
     payload: dict[str, str] = {"all": full_text}
