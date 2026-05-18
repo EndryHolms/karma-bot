@@ -274,6 +274,7 @@ def _build_horoscope_prompt(day_configs: list[dict[str, str]]) -> str:
         f"BANNED themes for Pisces: crying, tears, dreams, magic. "
         f"BANNED themes for Scorpio: revenge, poison, darkness. "
         f"Instead of astrology tropes, describe their day using purely mundane, random objects (cold coffee, Wi-Fi signals, broken zippers, tangled headphones, tax reports, missed alarms). "
+        f"CRITICAL: Do NOT repeat metaphors, themes, or sentence structures! Every single prediction across all dates and signs MUST be highly distinct and unique. "
         f"The text for each sign must be exactly ONE medium-length sentence, punchy and unique. "
         f"Each language section must contain exactly 12 horoscope lines and no extra introduction or conclusion. "
         f"Use exactly this format inside each language section: zodiac emoji, localized sign name, space, hyphen, space, the sentence. "
