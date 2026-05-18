@@ -323,7 +323,8 @@ def _build_language_payload(block: str, lang: str) -> dict[str, str]:
             "Рыбы": "Риби"
         }
         for wrong, right in corrections.items():
-            block = block.replace(wrong, right)
+            block = block.replace(f" {wrong} -", f" {right} -")
+            block = block.replace(f" {wrong} —", f" {right} —")
 
     lines = [line.strip() for line in block.splitlines() if line.strip()]
     full_text = "\n\n".join(lines)
