@@ -481,8 +481,15 @@ async def claim_ai_action_lock(db: firestore.Client, user_id: int, action_key: s
         def _run(transaction: firestore.Transaction) -> bool:
             snap = ref.get(transaction=transaction)
             data = snap.to_dict() or {} if snap.exists else {}
+            
             if data.get("active_ai_lock"):
-                return False
+                lock_at = data.get("active_ai_lock_at")
+                if lock_at:
+                    import datetime
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    if (now - lock_at).total_seconds() < 300:
+                        return False
+            
             transaction.set(
                 ref,
                 {
