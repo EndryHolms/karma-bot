@@ -28,7 +28,7 @@ class MatrixStates(StatesGroup):
 
 @router.callback_query(F.data == CB_MATRIX)
 async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
-    if not callback.fromuser or not callback.message:
+    if not callback.from_user or not callback.message:
         return
 
     lang = await get_user_language(db, callback.from_user.id)
