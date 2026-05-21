@@ -54,11 +54,25 @@ async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore
         text = get_text(lang, "matrix_intro")
         kb = back_to_menu_kb(lang)
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=kb,
-        parse_mode="HTML",
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb,
+            parse_mode="HTML",
+        )
+    except Exception:
+        try:
+            await callback.message.edit_caption(
+                caption=text,
+                reply_markup=kb,
+                parse_mode="HTML",
+            )
+        except Exception:
+            await callback.message.answer(
+                text,
+                reply_markup=kb,
+                parse_mode="HTML",
+            )
     await callback.answer()
 
 
