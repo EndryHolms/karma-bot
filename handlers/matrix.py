@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery, Message, BufferedInputFile
 from firebase_admin import firestore
 
 from firebase_db import claim_ai_action_lock, get_user_language, log_chat_message, release_ai_action_lock, get_balance, increment_balance
+from handlers.admin import ADMIN_IDS
 from keyboards import back_to_menu_kb, matrix_upsell_kb, matrix_saved_dob_kb, CB_MATRIX_FINANCE, CB_MATRIX_LOVE, CB_MATRIX_CLOSE, CB_MATRIX_USE_SAVED, CB_MATRIX_BUY_SLOT
 from lexicon import get_text
 from utils.matrix_math import calculate_matrix
@@ -67,7 +68,7 @@ async def _execute_saved_dob_logic(message: Message, clean_dob: str, user_id: in
     user_data = doc.to_dict() or {}
     
     last_req = user_data.get("matrix_last_own_req")
-    if last_req:
+    if last_req and user_id not in ADMIN_IDS:
         now = datetime.datetime.now(datetime.timezone.utc)
         diff = now - last_req
         if diff.days < 3:
@@ -152,7 +153,7 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
     else:
         # Foreign date logic
         matrix_free_slots = int(user_data.get("matrix_free_slots", 2))
-        if matrix_free_slots <= 0:
+        if matrix_free_slots <= 0 and user_id not in ADMIN_IDS:
             from keyboards import matrix_limit_foreign_kb
             await message.answer(
                 get_text(lang, "matrix_limit_foreign"),
