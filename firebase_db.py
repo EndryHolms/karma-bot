@@ -215,6 +215,10 @@ async def grant_referral_bonus_for_daily_card(db: firestore.Client, user_id: int
                 referral_rewards_total = int(referrer_data.get("referral_rewards_total", 0))
             except (TypeError, ValueError):
                 referral_rewards_total = 0
+            try:
+                matrix_free_slots = int(referrer_data.get("matrix_free_slots", 2))
+            except (TypeError, ValueError):
+                matrix_free_slots = 2
 
             transaction.set(
                 referrer_ref,
@@ -222,6 +226,7 @@ async def grant_referral_bonus_for_daily_card(db: firestore.Client, user_id: int
                     "balance": current_balance + bonus,
                     "referrals_count": referrals_count + 1,
                     "referral_rewards_total": referral_rewards_total + bonus,
+                    "matrix_free_slots": matrix_free_slots + 1,
                 },
                 merge=True,
             )

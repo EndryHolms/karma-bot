@@ -15,6 +15,7 @@ CB_MATRIX_FINANCE = "matrix:finance"
 CB_MATRIX_LOVE = "matrix:love"
 CB_MATRIX_CLOSE = "matrix:close"
 CB_MATRIX_USE_SAVED = "matrix:use_saved"
+CB_MATRIX_BUY_SLOT = "matrix:buy_slot"
 
 
 def language_selection_kb(prefix: str = "set_lang") -> InlineKeyboardMarkup:
@@ -64,6 +65,14 @@ def matrix_saved_dob_kb(lang: str = "uk", dob: str = "") -> InlineKeyboardMarkup
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=f"✅ {dob}", callback_data=CB_MATRIX_USE_SAVED)],
+            [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_CLOSE)]
+        ]
+    )
+
+def matrix_limit_foreign_kb(lang: str = "uk") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=get_text(lang, "matrix_buy_slot_btn"), callback_data=CB_MATRIX_BUY_SLOT)],
             [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_CLOSE)]
         ]
     )

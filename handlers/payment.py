@@ -79,6 +79,8 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
             service_name = "Гроші та Реалізація"
         elif payload.startswith("advice:"):
             service_name = "Порада Всесвіту"
+        elif payload.startswith("matrix_slot:"):
+            service_name = "Слот для Матриці"
 
         text = (
             f"💰 <b>Успішна оплата!</b>\n\n"
@@ -152,6 +154,20 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
             return
             
         await execute_matrix_upsell(message.from_user.id, message, channel, dob, matrix, db, tarot_model, lang)
+        return
+
+    elif payload.startswith("matrix_slot:"):
+        doc_ref = db.collection("users").document(str(message.from_user.id))
+        doc = await asyncio.to_thread(lambda: doc_ref.get())
+        user_data = doc.to_dict() or {}
+        slots = int(user_data.get("matrix_free_slots", 2))
+        await asyncio.to_thread(lambda: doc_ref.set({"matrix_free_slots": slots + 1}, merge=True))
+        
+        await message.answer(
+            "<b>Успіх!</b> Ти відкрив 1 додатковий слот для розрахунку нової дати.\nПовертайся в меню і натискай «Матриця Долі».",
+            parse_mode="HTML",
+            reply_markup=back_to_menu_kb(lang)
+        )
         return
 
     # Fallback / старий topup (якщо хтось платить за старим інвойсом, який ще висить у чаті)
