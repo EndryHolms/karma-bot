@@ -1,41 +1,51 @@
 def reduce_arcana(num: int) -> int:
     """
-    Зменшує число до <= 22 за правилами Матриці Долі (шляхом додавання цифр).
-    Якщо після першого додавання число все ще > 22, воно додається знову.
+    Зменшує число за класичним правилом Матриці Долі (метод 22 Арканів).
+    Якщо число > 22, додаємо його цифри, поки не отримаємо число <= 22.
     """
+    if num == 0:
+        return 22
+    
     while num > 22:
         num = sum(int(d) for d in str(num))
-    
-    # У Матриці Долі нульового аркану немає, число 0 зазвичай трактується як 22 (Блазень)
-    return num if num > 0 else 22
+        
+    return num
 
 
 def calculate_matrix(date_str: str) -> dict[str, int]:
     """
-    Приймає дату у форматі DD.MM.YYYY і повертає базові 4 точки Матриці.
-    
-    Згідно з техзавданням:
-    - Портрет: день народження.
-    - Талант: місяць народження.
-    - Кармічний хвіст (Минуле): сума цифр року народження.
-    - Центр (Характер): сума Портрету, Таланту та Кармічного хвоста.
+    Приймає дату DD.MM.YYYY.
+    Розраховує 5 головних точок ОСОБИСТОГО хреста Матриці Долі.
     """
-    parts = date_str.split('.')
-    day = int(parts[0])
-    month = int(parts[1])
-    year_str = parts[2]
+    try:
+        parts = date_str.split('.')
+        day = int(parts[0])
+        month = int(parts[1])
+        year = int(parts[2])
+    except (ValueError, IndexError):
+        return {} # Валідація на випадок збою форми
 
-    portrait = reduce_arcana(day)
-    talent = reduce_arcana(month)
+    # 1. Ліва точка (Захід) — Точка особистості, візитівка
+    left_point = reduce_arcana(day)
     
-    year_sum = sum(int(digit) for digit in year_str)
-    karma = reduce_arcana(year_sum)
+    # 2. Верхня точка (Північ) — Зв'язок з Ангелом-Охоронцем, таланти
+    top_point = reduce_arcana(month)
     
-    center = reduce_arcana(portrait + talent + karma)
+    # 3. Права точка (Схід) — Матеріальне прагнення, соціум (Рік)
+    right_point = reduce_arcana(year)
+    
+    # 4. Нижня точка (Південь) — Кармічний хвіст (Минулі життя, головний блок)
+    # Рахується як сума трьох попередніх точок
+    bottom_point = reduce_arcana(left_point + top_point + right_point)
+    
+    # 5. Центр (Зона комфорту, Характер, суть душі)
+    # Рахується як сума всіх 4 крайніх точок хреста
+    center_point = reduce_arcana(left_point + top_point + right_point + bottom_point)
 
     return {
-        "portrait": portrait,
-        "talent": talent,
-        "karma": karma,
-        "center": center
+        "portrait": left_point,    # День (Ліво)
+        "talent": top_point,       # Місяць (Вгорі)
+        "social": right_point,     # Рік (Право)
+        "karma": bottom_point,     # Кармічний хвіст (Внизу)
+        "center": center_point     # Характер (Центр)
     }
