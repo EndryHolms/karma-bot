@@ -22,6 +22,7 @@ from handlers.advice import router as advice_router
 from handlers.payment import router as payment_router
 from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
+from handlers.matrix import router as matrix_router
 from middleware import ChatLoggingMiddleware, ThrottlingMiddleware
 from notifications import send_daily_horoscope, send_monthly_card_reminders
 from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
@@ -91,6 +92,7 @@ async def main() -> None:
     dp.include_router(start_router)
     dp.include_router(tarot_router)
     dp.include_router(advice_router)
+    dp.include_router(matrix_router)
 
     port = int(os.environ.get("PORT", 8080))
     web_task = asyncio.create_task(_run_web_server(port))

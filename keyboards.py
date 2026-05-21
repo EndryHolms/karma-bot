@@ -1,4 +1,4 @@
-﻿from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from lexicon import get_text
 
@@ -23,12 +23,15 @@ def language_selection_kb(prefix: str = "set_lang") -> InlineKeyboardMarkup:
 
 
 def main_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
+    # Import locally to avoid circular dependency if needed, or import at top
+    from handlers.matrix import CB_MATRIX
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=get_text(lang, "menu_daily"), callback_data=CB_DAILY)],
             [InlineKeyboardButton(text=get_text(lang, "menu_love"), callback_data=CB_RELATIONSHIP)],
             [InlineKeyboardButton(text=get_text(lang, "menu_career"), callback_data=CB_CAREER)],
             [InlineKeyboardButton(text=get_text(lang, "menu_advice"), callback_data=CB_ADVICE)],
+            [InlineKeyboardButton(text=get_text(lang, "menu_matrix"), callback_data=CB_MATRIX)],
             [InlineKeyboardButton(text=get_text(lang, "menu_profile"), callback_data=CB_PROFILE)],
         ]
     )
