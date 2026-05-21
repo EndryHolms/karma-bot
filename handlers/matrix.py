@@ -308,7 +308,7 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     from handlers.payment import send_stars_invoice
     
     balance = await get_balance(db, user_id)
-    if balance < MATRIX_UPSELL_PRICE:
+    if balance < MATRIX_UPSELL_PRICE and user_id not in ADMIN_IDS:
         title_key = "matrix_btn_finance" if channel == "finance" else "matrix_btn_love"
         desc_key = "matrix_desc_finance" if channel == "finance" else "matrix_desc_love"
         await send_stars_invoice(
@@ -320,8 +320,9 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
         )
         return
         
-    # Списуємо баланс (зроблено вручну)
-    await increment_balance(db, user_id, -MATRIX_UPSELL_PRICE)
+    # Списуємо баланс (зроблено вручну, адміни безкоштовно)
+    if user_id not in ADMIN_IDS:
+        await increment_balance(db, user_id, -MATRIX_UPSELL_PRICE)
     
     # Прибираємо клавіатуру на поточному повідомленні
     try:
