@@ -148,7 +148,7 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
         matrix = data.get("matrix")
         
         if not dob or not matrix:
-            await message.answer("Оплата успішна, але дані Матриці втрачено. Зробіть базовий розрахунок ще раз у меню.", parse_mode="HTML")
+            await message.answer(get_text(lang, "matrix_payment_success_data_lost"), parse_mode="HTML")
             return
             
         await execute_matrix_upsell(message.from_user.id, message, channel, dob, matrix, db, tarot_model, lang)

@@ -28,7 +28,7 @@ class MatrixStates(StatesGroup):
 
 @router.callback_query(F.data == CB_MATRIX)
 async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore.Client) -> None:
-    if not callback.from_user or not callback.message:
+    if not callback.fromuser or not callback.message:
         return
 
     lang = await get_user_language(db, callback.from_user.id)
@@ -42,7 +42,7 @@ async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore
     await state.set_state(MatrixStates.waiting_for_dob)
     await state.update_data(action_key=action_key)
 
-    text = "🔮 <b>Матриця Долі</b>\n\nВведіть вашу дату народження у форматі <b>ДД.ММ.РРРР</b> (наприклад, 15.05.1995):"
+    text = get_text(lang, "matrix_intro")
     
     await callback.message.edit_text(
         text,
@@ -68,7 +68,7 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
         clean_dob = parsed_date.strftime("%d.%m.%Y")
     except ValueError:
         await message.answer(
-            "⚠️ Неправильний формат дати. Будь ласка, використовуйте формат <b>ДД.ММ.РРРР</b> (наприклад, 15.05.1995).",
+            get_text(lang, "matrix_invalid_date"),
             reply_markup=back_to_menu_kb(lang),
             parse_mode="HTML"
         )
@@ -77,7 +77,14 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
     data = await state.get_data()
     action_key = data.get("action_key", "matrix_base")
 
-    processing_msg = await message.answer("✨ Розраховую аркани та малюю вашу Матрицю...", parse_mode="HTML")
+    processing_msg = await message.answer(get_text(lang, "matrix_processing"), parse_mode="HTML")
+
+    prompt_lang_map = {
+        "uk": "українською мовою",
+        "en": "англійською мовою (in English)",
+        "ru": "російською мовою"
+    }
+    prompt_lang = prompt_lang_map.get(lang, "українською мовою")
 
     try:
         matrix = calculate_matrix(clean_dob)
@@ -96,7 +103,7 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
             f"- Характер/Центр (основа особистості): Аркан {matrix['center']}\n\n"
             f"Напиши містичну, глибоку, але сучасну розшифровку цих двох енергій (Портрет і Характер). "
             f"Використовуй езотеричний, але зрозумілий стиль. Форматування має бути красивим, з емодзі. "
-            f"Відповідай українською мовою. Звертайся до людини на 'ти'. Обсяг: приблизно 200-250 слів."
+            f"Відповідай {prompt_lang}. Звертайся до людини на 'ти'. Обсяг: приблизно 200-250 слів."
         )
 
         response = await asyncio.to_thread(tarot_model.generate_content, prompt)
@@ -140,17 +147,25 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
         await message.answer(get_text(lang, "error_energy_flows"), parse_mode="HTML")
         return
 
-    processing_msg = await message.answer("✨ Занурююсь у глибини вашої Матриці...", parse_mode="HTML")
+    processing_msg = await message.answer(get_text(lang, "matrix_upsell_processing"), parse_mode="HTML")
+
+    prompt_lang_map = {
+        "uk": "українською мовою",
+        "en": "англійською мовою (in English)",
+        "ru": "російською мовою"
+    }
+    prompt_lang = prompt_lang_map.get(lang, "українською мовою")
 
     try:
-        topic = "ФІНАНСОВОГО КАНАЛУ (гроші, професія, блоки)" if channel == "finance" else "КАНАЛУ СТОСУНКІВ (кохання, ідеальний партнер, блоки)"
+        topic_key = "matrix_topic_finance" if channel == "finance" else "matrix_topic_love"
+        topic = get_text(lang, topic_key)
         
         prompt = (
             f"Я розрахував Матрицю Долі для людини, яка народилася {dob}.\n"
             f"Аркани: Портрет {matrix.get('portrait')}, Талант {matrix.get('talent')}, "
             f"Карма {matrix.get('karma')}, Соціум {matrix.get('social')}, Центр {matrix.get('center')}.\n\n"
             f"Зроби глибокий аналіз {topic} на основі цих енергій. "
-            f"Відповідай українською мовою. Стиль: сучасна містика. Обсяг: приблизно 200-250 слів."
+            f"Відповідай {prompt_lang}. Стиль: сучасна містика. Обсяг: приблизно 200-250 слів."
         )
 
         response = await asyncio.to_thread(tarot_model.generate_content, prompt)
@@ -182,7 +197,7 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     matrix = data.get("matrix")
     
     if not dob or not matrix:
-        await callback.answer("⏳ Дані втрачено (час очікування вийшов). Будь ласка, почніть розрахунок Матриці спочатку.", show_alert=True)
+        await callback.answer(get_text(lang, "matrix_data_lost_alert"), show_alert=True)
         return
         
     channel = "finance" if callback.data == CB_MATRIX_FINANCE else "love"
@@ -192,11 +207,11 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     balance = await get_balance(db, user_id)
     if balance < MATRIX_UPSELL_PRICE:
         title_key = "matrix_btn_finance" if channel == "finance" else "matrix_btn_love"
-        desc = "Фінансовий канал Матриці" if channel == "finance" else "Канал стосунків Матриці"
+        desc_key = "matrix_desc_finance" if channel == "finance" else "matrix_desc_love"
         await send_stars_invoice(
             callback=callback,
             title=get_text(lang, title_key),
-            description=desc,
+            description=get_text(lang, desc_key),
             amount_stars=MATRIX_UPSELL_PRICE,
             payload=f"matrix:{channel}:{MATRIX_UPSELL_PRICE}"
         )
