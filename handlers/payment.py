@@ -49,7 +49,7 @@ async def pre_checkout(pre_checkout_query: PreCheckoutQuery) -> None:
 
 
 @router.message(F.successful_payment)
-async def successful_payment(message: Message, state: FSMContext, db: firestore.Client) -> None:
+async def successful_payment(message: Message, state: FSMContext, db: firestore.Client, tarot_model=None) -> None:
     sp = message.successful_payment
     if not sp or not message.from_user:
         return
@@ -133,6 +133,25 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
             reply_markup=back_to_menu_kb(lang),
             parse_mode="HTML"
         )
+        return
+
+    elif payload.startswith("matrix:"):
+        from handlers.matrix import execute_matrix_upsell
+        parts = payload.split(":")
+        channel = parts[1]
+        price = int(parts[2])
+        
+        await increment_balance(db, message.from_user.id, -price)
+        
+        data = await state.get_data()
+        dob = data.get("dob")
+        matrix = data.get("matrix")
+        
+        if not dob or not matrix:
+            await message.answer("Оплата успішна, але дані Матриці втрачено. Зробіть базовий розрахунок ще раз у меню.", parse_mode="HTML")
+            return
+            
+        await execute_matrix_upsell(message.from_user.id, message, channel, dob, matrix, db, tarot_model, lang)
         return
 
     # Fallback / старий topup (якщо хтось платить за старим інвойсом, який ще висить у чаті)

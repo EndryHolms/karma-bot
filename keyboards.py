@@ -8,8 +8,11 @@ CB_CAREER = "menu:career"
 CB_ADVICE = "menu:advice"
 CB_PROFILE = "menu:profile"
 CB_BACK_MENU = "menu:back"
+CB_CLOSE = "menu:close"
 CB_CHANGE_ZODIAC = "change_zodiac"
 CB_SHARE_HOROSCOPE = "horoscope:share"
+CB_MATRIX_FINANCE = "matrix:finance"
+CB_MATRIX_LOVE = "matrix:love"
 
 
 def language_selection_kb(prefix: str = "set_lang") -> InlineKeyboardMarkup:
@@ -41,6 +44,16 @@ def back_to_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_BACK_MENU)]
+        ]
+    )
+
+
+def matrix_upsell_kb(lang: str = "uk") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE)],
+            [InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE)],
+            [InlineKeyboardButton(text=get_text(lang, "btn_close"), callback_data=CB_CLOSE)]
         ]
     )
 

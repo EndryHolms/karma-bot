@@ -19,6 +19,7 @@ from firebase_db import (
 )
 from keyboards import (
     CB_BACK_MENU,
+    CB_CLOSE,
     CB_CHANGE_ZODIAC,
     CB_PROFILE,
     language_selection_kb,
@@ -508,5 +509,19 @@ async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> N
     await _render_horoscope_settings(callback, db)
 
 
+@router.callback_query(F.data == CB_CLOSE)
+async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
+    if not callback.from_user or not callback.message:
+        return
 
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
 
+    await state.clear()
+    await callback.message.delete()
+    
+    text = get_text(lang, "main_menu_title")
+    kb = main_menu_kb(lang)
+    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
