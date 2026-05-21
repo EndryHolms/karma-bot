@@ -28,11 +28,11 @@ def generate_matrix_image(matrix: dict[str, int], lang: str = "uk") -> bytes:
         font = ImageFont.load_default()
 
     coords = {
-        "portrait": (130, 622),
-        "talent": (510, 203),
-        "social": (890, 622),
-        "karma": (510, 1026),
-        "center": (510, 622)
+        "portrait": (180, 672),
+        "talent": (560, 253),
+        "social": (940, 672),
+        "karma": (560, 1076),
+        "center": (560, 672)
     }
 
     # Світло-золотий колір для тексту (в стилі ліній макета)
