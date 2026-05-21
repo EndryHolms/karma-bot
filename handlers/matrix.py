@@ -12,7 +12,7 @@ from aiogram.types import CallbackQuery, Message, BufferedInputFile
 from firebase_admin import firestore
 
 from firebase_db import claim_ai_action_lock, get_user_language, log_chat_message, release_ai_action_lock, get_balance, increment_balance
-from keyboards import back_to_menu_kb, matrix_upsell_kb, CB_MATRIX_FINANCE, CB_MATRIX_LOVE
+from keyboards import back_to_menu_kb, matrix_upsell_kb, matrix_saved_dob_kb, CB_MATRIX_FINANCE, CB_MATRIX_LOVE, CB_MATRIX_CLOSE, CB_MATRIX_USE_SAVED
 from lexicon import get_text
 from utils.matrix_math import calculate_matrix
 from utils.matrix_image import generate_matrix_image
@@ -42,14 +42,53 @@ async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore
     await state.set_state(MatrixStates.waiting_for_dob)
     await state.update_data(action_key=action_key)
 
-    text = get_text(lang, "matrix_intro")
+    doc = await asyncio.to_thread(lambda: db.collection("users").document(str(callback.from_user.id)).get())
+    user_data = doc.to_dict() or {}
+    saved_dob = user_data.get("matrix_dob")
+
+    if saved_dob:
+        text = get_text(lang, "matrix_intro_saved").format(dob=saved_dob)
+        kb = matrix_saved_dob_kb(lang, saved_dob)
+    else:
+        text = get_text(lang, "matrix_intro")
+        kb = back_to_menu_kb(lang)
     
     await callback.message.edit_text(
         text,
-        reply_markup=back_to_menu_kb(lang),
+        reply_markup=kb,
         parse_mode="HTML",
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == CB_MATRIX_USE_SAVED, MatrixStates.waiting_for_dob)
+async def use_saved_dob(callback: CallbackQuery, state: FSMContext, db: firestore.Client, tarot_model: Any) -> None:
+    if not callback.from_user or not callback.message:
+        return
+        
+    user_id = callback.from_user.id
+    
+    doc = await asyncio.to_thread(lambda: db.collection("users").document(str(user_id)).get())
+    user_data = doc.to_dict() or {}
+    clean_dob = user_data.get("matrix_dob")
+    
+    if not clean_dob:
+        await callback.answer("Дані втрачено", show_alert=True)
+        return
+        
+    await callback.answer()
+    
+    class FakeMessage:
+        def __init__(self, msg, text):
+            self._msg = msg
+            self.from_user = msg.from_user
+            self.text = text
+        async def answer(self, *args, **kwargs):
+            return await self._msg.answer(*args, **kwargs)
+        async def answer_photo(self, *args, **kwargs):
+            return await self._msg.answer_photo(*args, **kwargs)
+            
+    await process_dob(FakeMessage(callback.message, clean_dob), state, db, tarot_model)
 
 
 @router.message(MatrixStates.waiting_for_dob)
@@ -73,6 +112,9 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
             parse_mode="HTML"
         )
         return
+
+    # Зберігаємо дату в БД
+    await asyncio.to_thread(lambda: db.collection("users").document(str(user_id)).set({"matrix_dob": clean_dob}, merge=True))
 
     data = await state.get_data()
     action_key = data.get("action_key", "matrix_base")
@@ -196,9 +238,17 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     dob = data.get("dob")
     matrix = data.get("matrix")
     
-    if not dob or not matrix:
+    if not dob:
+        doc = await asyncio.to_thread(lambda: db.collection("users").document(str(user_id)).get())
+        user_data = doc.to_dict() or {}
+        dob = user_data.get("matrix_dob")
+        
+    if not dob:
         await callback.answer(get_text(lang, "matrix_data_lost_alert"), show_alert=True)
         return
+        
+    if not matrix:
+        matrix = calculate_matrix(dob)
         
     channel = "finance" if callback.data == CB_MATRIX_FINANCE else "love"
     
@@ -227,4 +277,26 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
         pass
         
     await execute_matrix_upsell(user_id, callback.message, channel, dob, matrix, db, tarot_model, lang)
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_MATRIX_CLOSE)
+async def matrix_close_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
+    if not callback.from_user or not callback.message:
+        return
+
+    lang = await get_user_language(db, callback.from_user.id)
+    
+    # Прибираємо кнопку Назад, залишаємо канали
+    try:
+        await callback.message.edit_reply_markup(reply_markup=matrix_upsell_kb(lang, hide_back=True))
+    except Exception:
+        pass
+        
+    await state.clear()
+    
+    text = get_text(lang, "main_menu_title")
+    from keyboards import main_menu_kb
+    kb = main_menu_kb(lang)
+    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()

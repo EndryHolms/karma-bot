@@ -13,6 +13,8 @@ CB_CHANGE_ZODIAC = "change_zodiac"
 CB_SHARE_HOROSCOPE = "horoscope:share"
 CB_MATRIX_FINANCE = "matrix:finance"
 CB_MATRIX_LOVE = "matrix:love"
+CB_MATRIX_CLOSE = "matrix:close"
+CB_MATRIX_USE_SAVED = "matrix:use_saved"
 
 
 def language_selection_kb(prefix: str = "set_lang") -> InlineKeyboardMarkup:
@@ -48,15 +50,23 @@ def back_to_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
     )
 
 
-def matrix_upsell_kb(lang: str = "uk") -> InlineKeyboardMarkup:
+def matrix_upsell_kb(lang: str = "uk", hide_back: bool = False) -> InlineKeyboardMarkup:
+    kb = [
+        [InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE)],
+        [InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE)]
+    ]
+    if not hide_back:
+        kb.append([InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_MATRIX_CLOSE)])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+
+def matrix_saved_dob_kb(lang: str = "uk", dob: str = "") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE)],
-            [InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE)],
+            [InlineKeyboardButton(text=f"✅ {dob}", callback_data=CB_MATRIX_USE_SAVED)],
             [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_CLOSE)]
         ]
     )
-
 
 def horoscope_share_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
     return main_menu_kb(lang)
