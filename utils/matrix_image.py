@@ -35,8 +35,8 @@ def generate_matrix_image(matrix: dict[str, int], lang: str = "uk") -> bytes:
         "center": (510, 622)
     }
 
-    # Чіткий чорний колір для тексту
-    text_color = (0, 0, 0, 255) 
+    # Світло-золотий колір для тексту (в стилі ліній макета)
+    text_color = (235, 195, 100, 255) 
 
     for key, (cx, cy) in coords.items():
         if key in matrix:
