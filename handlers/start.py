@@ -271,6 +271,8 @@ async def command_start(message: Message, db: firestore.Client) -> None:
     if not message.from_user:
         return
 
+    await release_ai_action_lock(db, message.from_user.id)
+
     is_new = await ensure_user(
         db,
         user_id=message.from_user.id,
