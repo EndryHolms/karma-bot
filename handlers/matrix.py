@@ -10,13 +10,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from firebase_admin import firestore
-
-from config import primary_model_name
+from typing import Any
 from firebase_db import claim_ai_action_lock, get_user_language, log_chat_message, release_ai_action_lock
 from keyboards import back_to_menu_kb
 from lexicon import get_text
 from utils.matrix_math import calculate_matrix
-from handlers.tarot import SAFETY_SETTINGS
 
 router = Router()
 
@@ -54,7 +52,7 @@ async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore
 
 
 @router.message(MatrixStates.waiting_for_dob)
-async def process_dob(message: Message, state: FSMContext, db: firestore.Client) -> None:
+async def process_dob(message: Message, state: FSMContext, db: firestore.Client, tarot_model: Any) -> None:
     if not message.from_user or not message.text:
         return
 
@@ -97,8 +95,7 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client)
             f"Відповідай українською мовою. Звертайся до людини на 'ти'. Обсяг: приблизно 200-250 слів."
         )
 
-        model = genai.GenerativeModel(primary_model_name, safety_settings=SAFETY_SETTINGS)
-        response = await asyncio.to_thread(model.generate_content, prompt)
+        response = await asyncio.to_thread(tarot_model.generate_content, prompt)
         reply_text = response.text
 
         if not reply_text:
