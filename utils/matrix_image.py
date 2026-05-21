@@ -20,8 +20,8 @@ def generate_matrix_image(matrix: dict[str, int], lang: str = "uk") -> bytes:
     img = Image.open(bg_path).convert("RGBA")
     draw = ImageDraw.Draw(img)
     
-    # 55 looks good for ~100px circles
-    font_size = 50
+    # 70 looks good for ~100px circles
+    font_size = 70
     try:
         font = ImageFont.truetype(font_path, font_size)
     except IOError:
@@ -35,8 +35,8 @@ def generate_matrix_image(matrix: dict[str, int], lang: str = "uk") -> bytes:
         "center": (510, 622)
     }
 
-    # Dark blue/purple to match esoteric vibe
-    text_color = (25, 20, 50, 255) 
+    # Чіткий чорний колір для тексту
+    text_color = (0, 0, 0, 255) 
 
     for key, (cx, cy) in coords.items():
         if key in matrix:

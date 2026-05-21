@@ -53,7 +53,7 @@ def matrix_upsell_kb(lang: str = "uk") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE)],
             [InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE)],
-            [InlineKeyboardButton(text=get_text(lang, "btn_close"), callback_data=CB_CLOSE)]
+            [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_CLOSE)]
         ]
     )
 

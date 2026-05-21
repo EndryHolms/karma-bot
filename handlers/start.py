@@ -513,13 +513,212 @@ async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> N
 async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
     if not callback.from_user or not callback.message:
         return
+    lowered = current_text.lower()
+    choose_language_markers = [
+        "choose your language",
+        "оберіть мову",
+        "выберите язык",
+    ]
+    if not any(marker in lowered for marker in choose_language_markers):
+        await profile(callback, db)
+        return
+
+    await callback.message.delete()
+
+    user_name = callback.from_user.first_name or "друже"
+    welcome_text = get_text(lang, "welcome_text").format(name=user_name)
+    img_welcome = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png"
+
+    try:
+            await callback.message.answer_photo(
+                photo=img_welcome,
+                caption=welcome_text,
+                reply_markup=main_menu_kb(lang),
+                parse_mode="HTML",
+            )
+            await log_chat_message(db, callback.from_user.id, "bot", welcome_text)
+    except Exception as exc:
+        logging.error("Welcome image send failed: %s", exc)
+        await callback.message.answer(
+            text=welcome_text,
+            reply_markup=main_menu_kb(lang),
+            parse_mode="HTML",
+        )
+
+
+@router.callback_query(F.data == CB_PROFILE)
+async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user:
+        return
+
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    user_data = doc.to_dict() or {}
+
+    lang = user_data.get("language", "uk")
+    balance = int(user_data.get("balance", 0) or 0)
+    current_zodiac = user_data.get("zodiac_sign", "all")
+    referral_rewards_total = int(user_data.get("referral_rewards_total", 0) or 0)
+    referrals_count = int(user_data.get("referrals_count", 0) or 0)
+
+    zodiac_dict = get_text(lang, "zodiacs")
+    zodiac_name = zodiac_dict.get(current_zodiac, zodiac_dict.get("all"))
+    text = _localized(_PROFILE_TEXT, lang).format(
+        balance=balance,
+        referral_rewards_total=referral_rewards_total,
+        referrals_count=referrals_count,
+        zodiac=zodiac_name,
+    )
+
+    profile_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=_localized(_INVITE_BUTTON, lang), callback_data=CB_INVITE_FRIEND)],
+            [InlineKeyboardButton(text=_localized(_LANGUAGE_BUTTON, lang), callback_data=CB_CHANGE_LANGUAGE)],
+            [InlineKeyboardButton(text=get_text(lang, "btn_setup_horoscope"), callback_data=CB_CHANGE_ZODIAC)],
+            [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_BACK_MENU)],
+        ]
+    )
+
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=profile_kb, parse_mode="HTML")
+        except Exception:
+            await callback.message.answer(text, reply_markup=profile_kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_CHANGE_LANGUAGE)
+async def change_language_from_profile(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    user_data = doc.to_dict() or {}
+    lang = user_data.get("language", "uk")
+
+    await callback.message.edit_text(
+        _localized(_LANGUAGE_PROMPT, lang),
+        reply_markup=language_selection_kb(prefix=LANG_PROFILE_PREFIX),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_INVITE_FRIEND)
+async def invite_friend(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    user_data = doc.to_dict() or {}
+    lang = user_data.get("language", "uk")
+
+    me = await callback.bot.get_me()
+    if not me.username:
+        await callback.answer(_localized(_USERNAME_MISSING, lang), show_alert=True)
+        return
+
+    link = f"https://t.me/{me.username}?start=ref_{callback.from_user.id}"
+    share_text = _localized(_REFERRAL_SHARE_TEXT, lang).format(link=link)
+    share_prompt = _localized(_REFERRAL_SHARE_PROMPT, lang)
+    text = _localized(_REFERRAL_SCREEN, lang).format(
+        bonus=REFERRAL_DAILY_BONUS,
+        link=link,
+        share_text=share_text,
+    )
+    share_url = "https://t.me/share/url?" + urlencode({"url": link, "text": share_prompt})
+
+    invite_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=_localized(_SEND_INVITE_BUTTON, lang), url=share_url)],
+            [InlineKeyboardButton(text=get_text(lang, "btn_back_profile"), callback_data=CB_PROFILE)],
+        ]
+    )
+
+    await callback.message.edit_text(text, reply_markup=invite_kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_BACK_MENU)
+async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
+    if not callback.from_user:
+        return
+
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
+
+    await release_ai_action_lock(db, callback.from_user.id)
+    await state.clear()
+
+    text = get_text(lang, "main_menu_title")
+    kb = main_menu_kb(lang)
+
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception:
+            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_CHANGE_ZODIAC)
+async def setup_zodiac(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user:
+        return
+
+    await _render_horoscope_settings(callback, db)
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_TOGGLE_HOROSCOPE)
+async def toggle_horoscope_delivery(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user:
+        return
+
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    user_data = doc.to_dict() or {}
+    lang = user_data.get("language", "uk")
+    current = bool(user_data.get("horoscope_enabled", True))
+    await update_horoscope_enabled(db, callback.from_user.id, not current)
+    await _render_horoscope_settings(callback, db)
+    await callback.answer(_horoscope_status_text(lang, not current))
+
+
+@router.callback_query(F.data.startswith("set_zodiac:"))
+async def process_set_zodiac(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user:
+        return
+
+    zodiac = callback.data.split(":")[1]
+    await update_user_zodiac(db, callback.from_user.id, zodiac)
+
+    user_id = str(callback.from_user.id)
+    doc = db.collection("users").document(user_id).get()
+    lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
+
+    await callback.answer(get_text(lang, "zodiac_saved"))
+    await _render_horoscope_settings(callback, db)
+
+
+@router.callback_query(F.data == CB_CLOSE)
+async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
+    if not callback.from_user or not callback.message:
+        return
 
     user_id = str(callback.from_user.id)
     doc = db.collection("users").document(user_id).get()
     lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
 
     await state.clear()
-    await callback.message.delete()
+    
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     
     text = get_text(lang, "main_menu_title")
     kb = main_menu_kb(lang)
