@@ -2,7 +2,7 @@ import logging
 from urllib.parse import urlencode
 
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from firebase_admin import firestore
@@ -519,6 +519,7 @@ async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, stat
     lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
 
     await state.clear()
+    await release_ai_action_lock(db, callback.from_user.id)
     
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -530,6 +531,6 @@ async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, stat
     await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
-@router.message(F.text)
+@router.message(F.text, StateFilter(None))
 async def unknown_message_handler(message: Message, db: firestore.Client) -> None:
     pass

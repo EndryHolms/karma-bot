@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+import datetime
 from typing import Any
 
 from aiogram import F, Router
@@ -12,7 +12,7 @@ from aiogram.types import CallbackQuery, Message, BufferedInputFile
 from firebase_admin import firestore
 
 from firebase_db import claim_ai_action_lock, get_user_language, log_chat_message, release_ai_action_lock, get_balance, increment_balance
-from keyboards import back_to_menu_kb, matrix_upsell_kb, matrix_saved_dob_kb, CB_MATRIX_FINANCE, CB_MATRIX_LOVE, CB_MATRIX_CLOSE, CB_MATRIX_USE_SAVED
+from keyboards import back_to_menu_kb, matrix_upsell_kb, matrix_saved_dob_kb, CB_MATRIX_FINANCE, CB_MATRIX_LOVE, CB_MATRIX_CLOSE, CB_MATRIX_USE_SAVED, CB_MATRIX_BUY_SLOT
 from lexicon import get_text
 from utils.matrix_math import calculate_matrix
 from utils.matrix_image import generate_matrix_image
@@ -61,12 +61,34 @@ async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore
     await callback.answer()
 
 
+async def _execute_saved_dob_logic(message: Message, clean_dob: str, user_id: int, state: FSMContext, db: firestore.Client, tarot_model: Any, lang: str):
+    doc_ref = db.collection("users").document(str(user_id))
+    doc = await asyncio.to_thread(lambda: doc_ref.get())
+    user_data = doc.to_dict() or {}
+    
+    last_req = user_data.get("matrix_last_own_req")
+    if last_req:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        diff = now - last_req
+        if diff.days < 3:
+            await message.answer(get_text(lang, "matrix_limit_own"), parse_mode="HTML")
+            return
+            
+    await asyncio.to_thread(lambda: doc_ref.set({"matrix_last_own_req": firestore.SERVER_TIMESTAMP}, merge=True))
+    
+    data = await state.get_data()
+    action_key = data.get("action_key", "matrix_base")
+    
+    await _process_matrix_generation(message, clean_dob, user_id, state, db, tarot_model, lang, action_key)
+
+
 @router.callback_query(F.data == CB_MATRIX_USE_SAVED, MatrixStates.waiting_for_dob)
 async def use_saved_dob(callback: CallbackQuery, state: FSMContext, db: firestore.Client, tarot_model: Any) -> None:
     if not callback.from_user or not callback.message:
         return
         
     user_id = callback.from_user.id
+    lang = await get_user_language(db, user_id)
     
     doc = await asyncio.to_thread(lambda: db.collection("users").document(str(user_id)).get())
     user_data = doc.to_dict() or {}
@@ -88,7 +110,7 @@ async def use_saved_dob(callback: CallbackQuery, state: FSMContext, db: firestor
         async def answer_photo(self, *args, **kwargs):
             return await self._msg.answer_photo(*args, **kwargs)
             
-    await process_dob(FakeMessage(callback.message, clean_dob), state, db, tarot_model)
+    await _execute_saved_dob_logic(FakeMessage(callback.message, clean_dob), clean_dob, user_id, state, db, tarot_model, lang)
 
 
 @router.message(MatrixStates.waiting_for_dob)
@@ -101,8 +123,8 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
     dob_str = message.text.strip()
 
     try:
-        parsed_date = datetime.strptime(dob_str, "%d.%m.%Y")
-        if parsed_date.year < 1900 or parsed_date.year > datetime.now().year:
+        parsed_date = datetime.datetime.strptime(dob_str, "%d.%m.%Y")
+        if parsed_date.year < 1900 or parsed_date.year > datetime.datetime.now().year:
             raise ValueError("Year out of bounds")
         clean_dob = parsed_date.strftime("%d.%m.%Y")
     except ValueError:
@@ -113,12 +135,41 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
         )
         return
 
-    # Зберігаємо дату в БД
-    await asyncio.to_thread(lambda: db.collection("users").document(str(user_id)).set({"matrix_dob": clean_dob}, merge=True))
+    doc_ref = db.collection("users").document(str(user_id))
+    doc = await asyncio.to_thread(lambda: doc_ref.get())
+    user_data = doc.to_dict() or {}
+    saved_dob = user_data.get("matrix_dob")
 
-    data = await state.get_data()
-    action_key = data.get("action_key", "matrix_base")
+    if not saved_dob:
+        # First time ever saving dob! It's free.
+        await asyncio.to_thread(lambda: doc_ref.set({"matrix_dob": clean_dob}, merge=True))
+        await _execute_saved_dob_logic(message, clean_dob, user_id, state, db, tarot_model, lang)
+        return
+    elif clean_dob == saved_dob:
+        # Repeating their own date. Fallback to use_saved_dob logic (3 day limit).
+        await _execute_saved_dob_logic(message, clean_dob, user_id, state, db, tarot_model, lang)
+        return
+    else:
+        # Foreign date logic
+        matrix_free_slots = int(user_data.get("matrix_free_slots", 2))
+        if matrix_free_slots <= 0:
+            from keyboards import matrix_limit_foreign_kb
+            await message.answer(
+                get_text(lang, "matrix_limit_foreign"),
+                reply_markup=matrix_limit_foreign_kb(lang),
+                parse_mode="HTML"
+            )
+            return
+            
+        # Consume slot
+        await asyncio.to_thread(lambda: doc_ref.set({"matrix_free_slots": matrix_free_slots - 1}, merge=True))
+        
+        data = await state.get_data()
+        action_key = data.get("action_key", "matrix_base")
+        await _process_matrix_generation(message, clean_dob, user_id, state, db, tarot_model, lang, action_key)
 
+
+async def _process_matrix_generation(message: Message, clean_dob: str, user_id: int, state: FSMContext, db: firestore.Client, tarot_model: Any, lang: str, action_key: str):
     processing_msg = await message.answer(get_text(lang, "matrix_processing"), parse_mode="HTML")
 
     prompt_lang_map = {
@@ -167,6 +218,7 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
         await log_chat_message(db, user_id, "bot", reply_text)
 
     except Exception as e:
+        import logging
         logging.error(f"Matrix of Destiny error for user {user_id}: {e}", exc_info=True)
         await processing_msg.edit_text(
             get_text(lang, "error_energy_flows"),
@@ -294,9 +346,30 @@ async def matrix_close_handler(callback: CallbackQuery, db: firestore.Client, st
         pass
         
     await state.clear()
+    await release_ai_action_lock(db, callback.from_user.id)
     
     text = get_text(lang, "main_menu_title")
     from keyboards import main_menu_kb
     kb = main_menu_kb(lang)
     await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_MATRIX_BUY_SLOT)
+async def handle_matrix_buy_slot(callback: CallbackQuery, db: firestore.Client) -> None:
+    if not callback.from_user or not callback.message:
+        return
+        
+    user_id = callback.from_user.id
+    lang = await get_user_language(db, user_id)
+    
+    from handlers.payment import send_stars_invoice
+    
+    await send_stars_invoice(
+        callback=callback,
+        title=get_text(lang, "matrix_slot_title"),
+        description=get_text(lang, "matrix_slot_desc"),
+        amount_stars=15,
+        payload="matrix_slot:15"
+    )
     await callback.answer()
