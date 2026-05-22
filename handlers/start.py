@@ -467,6 +467,10 @@ async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, st
         try:
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         except Exception:
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
             await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
@@ -523,14 +527,18 @@ async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, stat
     await state.clear()
     await release_ai_action_lock(db, callback.from_user.id)
     
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    
     text = get_text(lang, "main_menu_title")
     kb = main_menu_kb(lang)
-    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+    if callback.message:
+        try:
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception:
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
 @router.message(F.text, StateFilter(None))
