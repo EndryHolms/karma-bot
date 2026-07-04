@@ -72,8 +72,13 @@ class ChatLoggingMiddleware(BaseMiddleware):
                 role="user",
                 text=text,
             )
-        except Exception:
-            logger.exception("Failed to write chat history for user_id=%s", user_id)
+        except Exception as exc:
+            logger.warning(
+                "CHAT_HISTORY_WRITE_FAILED user_id=%s error_type=%s error=%s",
+                user_id,
+                type(exc).__name__,
+                exc,
+            )
 
     async def __call__(
         self,
