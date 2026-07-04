@@ -16,7 +16,7 @@ from google.generativeai.types import HarmBlockThreshold, HarmCategory
 import pytz
 
 from config import load_settings
-from firebase_db import init_firestore
+from firebase_db import check_firestore_access, init_firestore
 from handlers.admin import router as admin_router
 from handlers.advice import router as advice_router
 from handlers.payment import router as payment_router
@@ -63,6 +63,7 @@ async def main() -> None:
         firebase_credentials_json=settings.firebase_credentials_json,
         firebase_credentials_b64=settings.firebase_credentials_b64,
     )
+    await check_firestore_access(db)
 
     genai.configure(api_key=settings.gemini_api_key)
 

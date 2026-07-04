@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -23,9 +24,14 @@ class UserDoc:
 
 
 _db: Optional[firestore.Client] = None
+_credential_source = ""
+_credential_project_id = ""
+_credential_client_email = ""
+
+logger = logging.getLogger(__name__)
 
 
-def _credential_from_json(raw_json: str) -> credentials.Certificate:
+def _credential_from_json(raw_json: str) -> tuple[credentials.Certificate, dict[str, Any]]:
     try:
         service_account_info = json.loads(raw_json)
     except json.JSONDecodeError as exc:
@@ -34,10 +40,10 @@ def _credential_from_json(raw_json: str) -> credentials.Certificate:
     if not isinstance(service_account_info, dict):
         raise RuntimeError("Invalid FIREBASE_CREDENTIALS_JSON: expected JSON object")
 
-    return credentials.Certificate(service_account_info)
+    return credentials.Certificate(service_account_info), service_account_info
 
 
-def _credential_from_b64(raw_b64: str) -> credentials.Certificate:
+def _credential_from_b64(raw_b64: str) -> tuple[credentials.Certificate, dict[str, Any]]:
     try:
         decoded = base64.b64decode(raw_b64).decode("utf-8")
     except Exception as exc:
@@ -52,23 +58,42 @@ def _init_firestore_sync(
     firebase_credentials_json: str = "",
     firebase_credentials_b64: str = "",
 ) -> firestore.Client:
-    global _db
+    global _db, _credential_source, _credential_project_id, _credential_client_email
     if _db is not None:
         return _db
 
     if not firebase_admin._apps:
+        service_account_info: dict[str, Any] = {}
         if firebase_credentials_json:
-            cred = _credential_from_json(firebase_credentials_json)
+            cred, service_account_info = _credential_from_json(firebase_credentials_json)
+            _credential_source = "FIREBASE_CREDENTIALS_JSON"
         elif firebase_credentials_b64:
-            cred = _credential_from_b64(firebase_credentials_b64)
+            cred, service_account_info = _credential_from_b64(firebase_credentials_b64)
+            _credential_source = "FIREBASE_CREDENTIALS_B64"
         elif firebase_cred_path:
             cred = credentials.Certificate(firebase_cred_path)
+            _credential_source = "FIREBASE_CRED_PATH"
+            try:
+                with open(firebase_cred_path, "r", encoding="utf-8") as fh:
+                    loaded = json.load(fh)
+                if isinstance(loaded, dict):
+                    service_account_info = loaded
+            except Exception:
+                logger.warning("Could not read Firebase credential metadata from %s", firebase_cred_path)
         else:
             raise RuntimeError(
                 "Firebase credentials are not configured. Set FIREBASE_CRED_PATH, "
                 "FIREBASE_CREDENTIALS_JSON, or FIREBASE_CREDENTIALS_B64."
             )
 
+        _credential_project_id = str(service_account_info.get("project_id", ""))
+        _credential_client_email = str(service_account_info.get("client_email", ""))
+        logger.info(
+            "Initializing Firebase Admin using %s project_id=%s client_email=%s",
+            _credential_source,
+            _credential_project_id or "<unknown>",
+            _credential_client_email or "<unknown>",
+        )
         firebase_admin.initialize_app(cred)
 
     _db = firestore.client()
@@ -88,6 +113,28 @@ async def init_firestore(
         firebase_credentials_b64=firebase_credentials_b64,
     )
 
+
+async def check_firestore_access(db: firestore.Client) -> None:
+    def _check_sync() -> None:
+        list(db.collection("users").limit(1).stream())
+
+    try:
+        await asyncio.to_thread(_check_sync)
+    except Exception:
+        logger.exception(
+            "Firestore access check failed for credential_source=%s project_id=%s client_email=%s",
+            _credential_source or "<unknown>",
+            _credential_project_id or "<unknown>",
+            _credential_client_email or "<unknown>",
+        )
+        raise
+
+    logger.info(
+        "Firestore access check succeeded for credential_source=%s project_id=%s client_email=%s",
+        _credential_source or "<unknown>",
+        _credential_project_id or "<unknown>",
+        _credential_client_email or "<unknown>",
+    )
 
 def _users_col(db: firestore.Client):
     return db.collection("users")
@@ -556,28 +603,19 @@ async def claim_ai_action_lock(db: firestore.Client, user_id: int, action_key: s
 
 
 async def release_ai_action_lock(db: firestore.Client, user_id: int, action_key: str | None = None) -> None:
-    def _tx_sync() -> None:
+    def _release_sync() -> None:
         ref = _users_col(db).document(str(user_id))
-
-        @firestore.transactional
-        def _run(transaction: firestore.Transaction) -> None:
-            snap = ref.get(transaction=transaction)
+        if action_key is not None:
+            snap = ref.get()
             data = snap.to_dict() or {} if snap.exists else {}
-            current = data.get("active_ai_lock")
-            if not current:
+            if data.get("active_ai_lock") != action_key:
                 return
-            if action_key is not None and current != action_key:
-                return
-            transaction.set(
-                ref,
-                {
-                    "active_ai_lock": firestore.DELETE_FIELD,
-                    "active_ai_lock_at": firestore.DELETE_FIELD,
-                },
-                merge=True,
-            )
+        ref.set(
+            {
+                "active_ai_lock": firestore.DELETE_FIELD,
+                "active_ai_lock_at": firestore.DELETE_FIELD,
+            },
+            merge=True,
+        )
 
-        transaction = db.transaction()
-        _run(transaction)
-
-    await asyncio.to_thread(_tx_sync)
+    await asyncio.to_thread(_release_sync)
