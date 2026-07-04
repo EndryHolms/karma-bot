@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -23,21 +25,68 @@ class UserDoc:
 _db: Optional[firestore.Client] = None
 
 
-def _init_firestore_sync(firebase_cred_path: str) -> firestore.Client:
+def _credential_from_json(raw_json: str) -> credentials.Certificate:
+    try:
+        service_account_info = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Invalid FIREBASE_CREDENTIALS_JSON: expected service account JSON") from exc
+
+    if not isinstance(service_account_info, dict):
+        raise RuntimeError("Invalid FIREBASE_CREDENTIALS_JSON: expected JSON object")
+
+    return credentials.Certificate(service_account_info)
+
+
+def _credential_from_b64(raw_b64: str) -> credentials.Certificate:
+    try:
+        decoded = base64.b64decode(raw_b64).decode("utf-8")
+    except Exception as exc:
+        raise RuntimeError("Invalid FIREBASE_CREDENTIALS_B64: expected base64-encoded service account JSON") from exc
+
+    return _credential_from_json(decoded)
+
+
+def _init_firestore_sync(
+    firebase_cred_path: str = "",
+    *,
+    firebase_credentials_json: str = "",
+    firebase_credentials_b64: str = "",
+) -> firestore.Client:
     global _db
     if _db is not None:
         return _db
 
     if not firebase_admin._apps:
-        cred = credentials.Certificate(firebase_cred_path)
+        if firebase_credentials_json:
+            cred = _credential_from_json(firebase_credentials_json)
+        elif firebase_credentials_b64:
+            cred = _credential_from_b64(firebase_credentials_b64)
+        elif firebase_cred_path:
+            cred = credentials.Certificate(firebase_cred_path)
+        else:
+            raise RuntimeError(
+                "Firebase credentials are not configured. Set FIREBASE_CRED_PATH, "
+                "FIREBASE_CREDENTIALS_JSON, or FIREBASE_CREDENTIALS_B64."
+            )
+
         firebase_admin.initialize_app(cred)
 
     _db = firestore.client()
     return _db
 
 
-async def init_firestore(firebase_cred_path: str) -> firestore.Client:
-    return await asyncio.to_thread(_init_firestore_sync, firebase_cred_path)
+async def init_firestore(
+    firebase_cred_path: str = "",
+    *,
+    firebase_credentials_json: str = "",
+    firebase_credentials_b64: str = "",
+) -> firestore.Client:
+    return await asyncio.to_thread(
+        _init_firestore_sync,
+        firebase_cred_path,
+        firebase_credentials_json=firebase_credentials_json,
+        firebase_credentials_b64=firebase_credentials_b64,
+    )
 
 
 def _users_col(db: firestore.Client):

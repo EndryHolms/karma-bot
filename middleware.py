@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Any, Awaitable, Callable, Dict
 
@@ -7,6 +8,8 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from firebase_db import get_user_language, log_chat_message
 from lexicon import get_text
+
+logger = logging.getLogger(__name__)
 
 
 class ThrottlingMiddleware(BaseMiddleware):
@@ -61,6 +64,17 @@ class ThrottlingMiddleware(BaseMiddleware):
 
 
 class ChatLoggingMiddleware(BaseMiddleware):
+    async def _safe_log_chat_message(self, db: Any, user_id: int, text: str) -> None:
+        try:
+            await log_chat_message(
+                db=db,
+                user_id=user_id,
+                role="user",
+                text=text,
+            )
+        except Exception:
+            logger.exception("Failed to write chat history for user_id=%s", user_id)
+
     async def __call__(
         self,
         handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
@@ -71,10 +85,9 @@ class ChatLoggingMiddleware(BaseMiddleware):
             db = data.get("db")
             if db and event.from_user:
                 asyncio.create_task(
-                    log_chat_message(
+                    self._safe_log_chat_message(
                         db=db,
                         user_id=event.from_user.id,
-                        role="user",
                         text=event.text,
                     )
                 )
