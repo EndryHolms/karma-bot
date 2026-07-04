@@ -114,27 +114,31 @@ async def init_firestore(
     )
 
 
-async def check_firestore_access(db: firestore.Client) -> None:
+async def check_firestore_access(db: firestore.Client) -> bool:
     def _check_sync() -> None:
         list(db.collection("users").limit(1).stream())
 
     try:
         await asyncio.to_thread(_check_sync)
-    except Exception:
-        logger.exception(
-            "Firestore access check failed for credential_source=%s project_id=%s client_email=%s",
+    except Exception as exc:
+        logger.error(
+            "FIRESTORE_ACCESS_CHECK_FAILED credential_source=%s project_id=%s client_email=%s error_type=%s error=%s",
             _credential_source or "<unknown>",
             _credential_project_id or "<unknown>",
             _credential_client_email or "<unknown>",
+            type(exc).__name__,
+            exc,
         )
-        raise
+        return False
 
     logger.info(
-        "Firestore access check succeeded for credential_source=%s project_id=%s client_email=%s",
+        "FIRESTORE_ACCESS_CHECK_SUCCEEDED credential_source=%s project_id=%s client_email=%s",
         _credential_source or "<unknown>",
         _credential_project_id or "<unknown>",
         _credential_client_email or "<unknown>",
     )
+    return True
+
 
 def _users_col(db: firestore.Client):
     return db.collection("users")
