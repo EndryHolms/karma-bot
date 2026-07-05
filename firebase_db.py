@@ -107,7 +107,16 @@ def _init_firestore_sync(
         )
         firebase_admin.initialize_app(cred)
 
-    _db = firestore.client()
+    # Use REST transport to bypass gRPC/HTTP2 issues on Render
+    import google.auth
+    from google.cloud import firestore as google_firestore
+    app = firebase_admin.get_app()
+    app_cred = app.credential.get_credential()
+    _db = google_firestore.Client(
+        project=_credential_project_id or app.project_id,
+        credentials=app_cred,
+        transport="rest",
+    )
     return _db
 
 
