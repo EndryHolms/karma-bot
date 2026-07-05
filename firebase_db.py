@@ -126,29 +126,53 @@ async def init_firestore(
 
 
 async def check_firestore_access(db: firestore.Client) -> bool:
-    def _check_sync() -> None:
-        list(db.collection("users").limit(1).stream())
+    def _check_sync() -> list[tuple[str, bool, str]]:
+        diagnostics_ref = db.collection("_diagnostics").document("firestore_access_check")
+        checks: list[tuple[str, bool, str]] = []
 
-    try:
-        await asyncio.to_thread(_check_sync)
-    except Exception as exc:
-        logger.error(
-            "FIRESTORE_ACCESS_CHECK_FAILED credential_source=%s project_id=%s client_email=%s error_type=%s error=%s",
+        operations = (
+            ("document_get", lambda: diagnostics_ref.get()),
+            ("query_stream", lambda: list(db.collection("users").limit(1).stream())),
+            (
+                "document_set",
+                lambda: diagnostics_ref.set(
+                    {
+                        "checked_at": firestore.SERVER_TIMESTAMP,
+                        "source": "startup_probe",
+                    },
+                    merge=True,
+                ),
+            ),
+        )
+
+        for name, operation in operations:
+            try:
+                operation()
+            except Exception as exc:
+                checks.append((name, False, f"{type(exc).__name__}: {exc}"))
+            else:
+                checks.append((name, True, "ok"))
+
+        return checks
+
+    client_project = getattr(db, "project", "<unknown>")
+    checks = await asyncio.to_thread(_check_sync)
+    failed = [check for check in checks if not check[1]]
+
+    for operation, ok, detail in checks:
+        log = logger.info if ok else logger.error
+        log(
+            "FIRESTORE_ACCESS_CHECK operation=%s ok=%s credential_source=%s credential_project_id=%s client_project=%s client_email=%s detail=%s",
+            operation,
+            ok,
             _credential_source or "<unknown>",
             _credential_project_id or "<unknown>",
+            client_project,
             _credential_client_email or "<unknown>",
-            type(exc).__name__,
-            exc,
+            detail,
         )
-        return False
 
-    logger.info(
-        "FIRESTORE_ACCESS_CHECK_SUCCEEDED credential_source=%s project_id=%s client_email=%s",
-        _credential_source or "<unknown>",
-        _credential_project_id or "<unknown>",
-        _credential_client_email or "<unknown>",
-    )
-    return True
+    return not failed
 
 
 def _users_col(db: firestore.Client):
