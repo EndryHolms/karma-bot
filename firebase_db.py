@@ -27,6 +27,7 @@ _db: Optional[firestore.Client] = None
 _credential_source = ""
 _credential_project_id = ""
 _credential_client_email = ""
+_credential_private_key_id = ""
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ def _init_firestore_sync(
     firebase_credentials_json: str = "",
     firebase_credentials_b64: str = "",
 ) -> firestore.Client:
-    global _db, _credential_source, _credential_project_id, _credential_client_email
+    global _db, _credential_source, _credential_project_id, _credential_client_email, _credential_private_key_id
     if _db is not None:
         return _db
 
@@ -99,24 +100,17 @@ def _init_firestore_sync(
 
         _credential_project_id = str(service_account_info.get("project_id", ""))
         _credential_client_email = str(service_account_info.get("client_email", ""))
+        _credential_private_key_id = str(service_account_info.get("private_key_id", ""))
         logger.info(
-            "Initializing Firebase Admin using %s project_id=%s client_email=%s",
+            "Initializing Firebase Admin using %s project_id=%s client_email=%s private_key_id=%s",
             _credential_source,
             _credential_project_id or "<unknown>",
             _credential_client_email or "<unknown>",
+            _credential_private_key_id or "<unknown>",
         )
         firebase_admin.initialize_app(cred)
 
-    # Use REST transport to bypass gRPC/HTTP2 issues on Render
-    import google.auth
-    from google.cloud import firestore as google_firestore
-    app = firebase_admin.get_app()
-    app_cred = app.credential.get_credential()
-    _db = google_firestore.Client(
-        project=_credential_project_id or app.project_id,
-        credentials=app_cred,
-        transport="rest",
-    )
+    _db = firestore.client()
     return _db
 
 
@@ -171,13 +165,14 @@ async def check_firestore_access(db: firestore.Client) -> bool:
     for operation, ok, detail in checks:
         log = logger.info if ok else logger.error
         log(
-            "FIRESTORE_ACCESS_CHECK operation=%s ok=%s credential_source=%s credential_project_id=%s client_project=%s client_email=%s detail=%s",
+            "FIRESTORE_ACCESS_CHECK operation=%s ok=%s credential_source=%s credential_project_id=%s client_project=%s client_email=%s private_key_id=%s detail=%s",
             operation,
             ok,
             _credential_source or "<unknown>",
             _credential_project_id or "<unknown>",
             client_project,
             _credential_client_email or "<unknown>",
+            _credential_private_key_id or "<unknown>",
             detail,
         )
 
