@@ -371,8 +371,22 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
         return
 
     user_id = str(callback.from_user.id)
-    doc = db.collection("users").document(user_id).get()
-    user_data = doc.to_dict() or {}
+    try:
+        doc = db.collection("users").document(user_id).get()
+        user_data = doc.to_dict() or {}
+    except Exception as exc:
+        logging.warning(
+            "PROFILE_LOAD_FAILED user_id=%s error_type=%s error=%s",
+            user_id,
+            type(exc).__name__,
+            exc,
+        )
+        if callback.message:
+            await callback.message.answer(
+                "Service is temporarily unavailable. Please try again a bit later."
+            )
+        await callback.answer()
+        return
 
     lang = user_data.get("language", "uk")
     balance = int(user_data.get("balance", 0) or 0)
