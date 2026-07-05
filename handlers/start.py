@@ -273,12 +273,24 @@ async def command_start(message: Message, db: firestore.Client) -> None:
 
     await release_ai_action_lock(db, message.from_user.id)
 
-    is_new = await ensure_user(
-        db,
-        user_id=message.from_user.id,
-        username=message.from_user.username or "",
-        first_name=message.from_user.first_name or "",
-    )
+    try:
+        is_new = await ensure_user(
+            db,
+            user_id=message.from_user.id,
+            username=message.from_user.username or "",
+            first_name=message.from_user.first_name or "",
+        )
+    except Exception as exc:
+        logging.warning(
+            "START_ENSURE_USER_FAILED user_id=%s error_type=%s error=%s",
+            message.from_user.id,
+            type(exc).__name__,
+            exc,
+        )
+        await message.answer(
+            "Service is temporarily unavailable. Please try again a bit later."
+        )
+        return
 
     if is_new:
         from handlers.admin import ADMIN_IDS
