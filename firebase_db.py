@@ -2,11 +2,13 @@ import asyncio
 import base64
 import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.cloud.firestore_v1.services.firestore import client as firestore_gapic_client
 
 REFERRAL_DAILY_BONUS = 1
 
@@ -111,8 +113,23 @@ def _init_firestore_sync(
         firebase_admin.initialize_app(cred)
 
     _db = firestore.client()
+    _force_firestore_rest_transport(_db)
     return _db
 
+
+
+def _force_firestore_rest_transport(db: firestore.Client) -> None:
+    requested_transport = os.getenv("FIRESTORE_TRANSPORT", "rest").strip().lower()
+    if requested_transport != "rest":
+        logger.info("Using default Firestore transport requested by FIRESTORE_TRANSPORT=%s", requested_transport)
+        return
+
+    db._firestore_api_internal = firestore_gapic_client.FirestoreClient(
+        credentials=db._credentials,
+        transport="rest",
+        client_options=db._client_options,
+    )
+    logger.info("Forced Firestore GAPIC transport=rest")
 
 async def init_firestore(
     firebase_cred_path: str = "",
