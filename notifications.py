@@ -196,7 +196,15 @@ async def _set_generation_error(db: firestore.Client, date_key: str, message: st
             merge=True,
         )
 
-    await asyncio.to_thread(_write_sync)
+    try:
+        await asyncio.to_thread(_write_sync)
+    except Exception as exc:
+        logging.warning(
+            "HOROSCOPE_GENERATION_ERROR_WRITE_FAILED date_key=%s error_type=%s error=%s",
+            date_key,
+            type(exc).__name__,
+            exc,
+        )
 
 
 async def _claim_delivery(db: firestore.Client, date_key: str, now: datetime) -> bool:
@@ -382,7 +390,16 @@ def _parse_batch_horoscope(raw_text: str) -> dict[str, dict[str, dict[str, str]]
 
 async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: Any, date_key: str) -> dict[str, dict[str, str]] | None:
     # Attempt to get from cache first
-    cached = await _get_cached_horoscope_payload(db, date_key)
+    try:
+        cached = await _get_cached_horoscope_payload(db, date_key)
+    except Exception as exc:
+        logging.warning(
+            "HOROSCOPE_CACHE_READ_FAILED date_key=%s error_type=%s error=%s",
+            date_key,
+            type(exc).__name__,
+            exc,
+        )
+        return None
     if cached:
         return cached
 
@@ -396,7 +413,16 @@ async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: 
         t_key = target_dt.strftime("%Y-%m-%d")
         # Check if already cached (optional but good for efficiency)
         if i > 0:
-            existing = await _get_cached_horoscope_payload(db, t_key)
+            try:
+                existing = await _get_cached_horoscope_payload(db, t_key)
+            except Exception as exc:
+                logging.warning(
+                    "HOROSCOPE_CACHE_READ_FAILED date_key=%s error_type=%s error=%s",
+                    t_key,
+                    type(exc).__name__,
+                    exc,
+                )
+                return None
             if existing:
                 continue
         
@@ -406,7 +432,16 @@ async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: 
         })
 
     if not batch_configs:
-        return await _get_cached_horoscope_payload(db, date_key)
+        try:
+            return await _get_cached_horoscope_payload(db, date_key)
+        except Exception as exc:
+            logging.warning(
+                "HOROSCOPE_CACHE_READ_FAILED date_key=%s error_type=%s error=%s",
+                date_key,
+                type(exc).__name__,
+                exc,
+            )
+            return None
 
     prompt = _build_horoscope_prompt(batch_configs)
     
