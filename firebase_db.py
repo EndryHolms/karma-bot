@@ -44,10 +44,21 @@ def _credential_from_json(raw_json: str) -> tuple[credentials.Certificate, dict[
 
 
 def _credential_from_b64(raw_b64: str) -> tuple[credentials.Certificate, dict[str, Any]]:
+    stripped = raw_b64.strip()
+    if stripped.startswith("{"):
+        logger.warning(
+            "FIREBASE_CREDENTIALS_B64 contains raw JSON, not base64; accepting it as service account JSON"
+        )
+        return _credential_from_json(stripped)
+
+    normalized = "".join(stripped.split())
     try:
-        decoded = base64.b64decode(raw_b64).decode("utf-8")
+        decoded = base64.b64decode(normalized, validate=True).decode("utf-8")
     except Exception as exc:
-        raise RuntimeError("Invalid FIREBASE_CREDENTIALS_B64: expected base64-encoded service account JSON") from exc
+        raise RuntimeError(
+            "Invalid FIREBASE_CREDENTIALS_B64: expected base64-encoded service account JSON "
+            f"(received {len(stripped)} characters; a real key is usually thousands of characters)"
+        ) from exc
 
     return _credential_from_json(decoded)
 
