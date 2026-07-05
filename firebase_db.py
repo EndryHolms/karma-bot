@@ -622,4 +622,12 @@ async def release_ai_action_lock(db: firestore.Client, user_id: int, action_key:
             merge=True,
         )
 
-    await asyncio.to_thread(_release_sync)
+    try:
+        await asyncio.to_thread(_release_sync)
+    except Exception as exc:
+        logger.warning(
+            "AI_ACTION_LOCK_RELEASE_FAILED user_id=%s error_type=%s error=%s",
+            user_id,
+            type(exc).__name__,
+            exc,
+        )
