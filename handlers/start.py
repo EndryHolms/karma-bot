@@ -158,9 +158,9 @@ _REFERRAL_SCREEN = {
 }
 
 _REFERRAL_SHARE_TEXT = {
-    "uk": "✨ Я користуюсь Karma — ботом для карти дня, гороскопів і розкладів. Спробуй теж: {link}",
-    "en": "✨ I use Karma — a bot for the Card of the Day, horoscopes, and readings. Try it too: {link}",
-    "ru": "✨ Я пользуюсь Karma — ботом для карты дня, гороскопов и раскладов. Попробуй тоже: {link}",
+    "uk": "✨ Я користуюсь Karma — ботом для карти дня, гороскопів і розкладів. <a href=\"{link}\">Спробуй теж</a>",
+    "en": "✨ I use Karma — a bot for the Card of the Day, horoscopes, and readings. <a href=\"{link}\">Try it too</a>",
+    "ru": "✨ Я пользуюсь Karma — ботом для карты дня, гороскопов и раскладов. <a href=\"{link}\">Попробуй тоже</a>",
 }
 
 _REFERRAL_SHARE_PROMPT = {
