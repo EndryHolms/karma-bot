@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.auth.transport.requests import AuthorizedSession
 from google.cloud.firestore_v1.services.firestore import client as firestore_gapic_client
 
 REFERRAL_DAILY_BONUS = 1
@@ -150,6 +151,32 @@ async def check_firestore_access(db: firestore.Client) -> bool:
         diagnostics_ref = db.collection("_diagnostics").document("firestore_access_check")
         checks: list[tuple[str, bool, str]] = []
 
+        def _raw_rest_request(method: str) -> str:
+            raw_credentials = db._credentials
+            if getattr(raw_credentials, "requires_scopes", False):
+                raw_credentials = raw_credentials.with_scopes(["https://www.googleapis.com/auth/datastore"])
+            session = AuthorizedSession(raw_credentials)
+            url = (
+                f"https://firestore.googleapis.com/v1/projects/{db.project}"
+                "/databases/(default)/documents/_diagnostics/firestore_access_check"
+            )
+            if method == "GET":
+                response = session.get(url, timeout=30)
+            else:
+                response = session.patch(
+                    url,
+                    json={
+                        "fields": {
+                            "source": {"stringValue": "render_raw_rest_probe"},
+                            "checked_marker": {"stringValue": "ok"},
+                        }
+                    },
+                    timeout=30,
+                )
+            if response.status_code not in (200, 404):
+                return f"HTTP {response.status_code}: {response.text[:300]}"
+            return f"HTTP {response.status_code}"
+
         operations = (
             ("document_get", lambda: diagnostics_ref.get()),
             ("query_stream", lambda: list(db.collection("users").limit(1).stream())),
@@ -163,16 +190,19 @@ async def check_firestore_access(db: firestore.Client) -> bool:
                     merge=True,
                 ),
             ),
+            ("raw_rest_get", lambda: _raw_rest_request("GET")),
+            ("raw_rest_patch", lambda: _raw_rest_request("PATCH")),
         )
 
         for name, operation in operations:
             try:
-                operation()
+                result = operation()
+                if isinstance(result, str) and result.startswith("HTTP ") and not result.startswith(("HTTP 200", "HTTP 404")):
+                    checks.append((name, False, result))
+                else:
+                    checks.append((name, True, result or "ok"))
             except Exception as exc:
                 checks.append((name, False, f"{type(exc).__name__}: {exc}"))
-            else:
-                checks.append((name, True, "ok"))
-
         return checks
 
     client_project = getattr(db, "project", "<unknown>")
