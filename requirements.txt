@@ -7,4 +7,3 @@ aiohttp
 apscheduler>=3.10.0
 pytz
 Pillow==10.4.0
-requests>=2.31.0

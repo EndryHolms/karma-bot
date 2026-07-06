@@ -39,23 +39,9 @@ async def health_check(request: web.Request) -> web.Response:
     return web.Response(text="Bot is alive")
 
 
-async def firestore_diagnostics(request: web.Request) -> web.Response:
-    db = request.app["db"]
-    ok = await check_firestore_access(db)
-    return web.json_response(
-        {
-            "ok": ok,
-            "message": "Check Render logs for FIRESTORE_ACCESS_CHECK entries.",
-        },
-        status=200 if ok else 503,
-    )
-
-
-async def _run_web_server(port: int, db) -> None:
+async def _run_web_server(port: int) -> None:
     app = web.Application()
-    app["db"] = db
     app.router.add_get("/", health_check)
-    app.router.add_get("/firestore-diagnostics", firestore_diagnostics)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=port)
@@ -114,7 +100,7 @@ async def main() -> None:
     dp.include_router(matrix_router)
 
     port = int(os.environ.get("PORT", 8080))
-    web_task = asyncio.create_task(_run_web_server(port, db))
+    web_task = asyncio.create_task(_run_web_server(port))
 
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     scheduler.add_job(send_monthly_card_reminders, trigger="cron", day=1, hour=12, minute=0, args=[bot, db])
