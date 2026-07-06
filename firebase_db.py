@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import firebase_admin
+import requests
 from firebase_admin import credentials, firestore
 from google.auth.transport.requests import AuthorizedSession
 from google.cloud.firestore_v1.services.firestore import client as firestore_gapic_client
@@ -177,6 +178,28 @@ async def check_firestore_access(db: firestore.Client) -> bool:
                 return f"HTTP {response.status_code}: {response.text[:300]}"
             return f"HTTP {response.status_code}"
 
+        def _raw_public_rest_request(method: str) -> str:
+            url = (
+                f"https://firestore.googleapis.com/v1/projects/{db.project}"
+                "/databases/(default)/documents/_diagnostics/firestore_public_access_check"
+            )
+            if method == "GET":
+                response = requests.get(url, timeout=30)
+            else:
+                response = requests.patch(
+                    url,
+                    json={
+                        "fields": {
+                            "source": {"stringValue": "render_raw_public_rest_probe"},
+                            "checked_marker": {"stringValue": "ok"},
+                        }
+                    },
+                    timeout=30,
+                )
+            if response.status_code not in (200, 404):
+                return f"HTTP {response.status_code}: {response.text[:300]}"
+            return f"HTTP {response.status_code}"
+
         operations = (
             ("document_get", lambda: diagnostics_ref.get()),
             ("query_stream", lambda: list(db.collection("users").limit(1).stream())),
@@ -192,6 +215,8 @@ async def check_firestore_access(db: firestore.Client) -> bool:
             ),
             ("raw_rest_get", lambda: _raw_rest_request("GET")),
             ("raw_rest_patch", lambda: _raw_rest_request("PATCH")),
+            ("raw_public_rest_get", lambda: _raw_public_rest_request("GET")),
+            ("raw_public_rest_patch", lambda: _raw_public_rest_request("PATCH")),
         )
 
         for name, operation in operations:
