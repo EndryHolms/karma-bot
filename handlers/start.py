@@ -303,10 +303,17 @@ async def command_start(message: Message, db: firestore.Client) -> None:
 
     if is_new:
         from handlers.admin import ADMIN_IDS
-        username_str = f"@{message.from_user.username}" if message.from_user.username else "немає"
+        import html
+        
+        logging.info("New user registered: %s", message.from_user.id)
+        
+        first_name_safe = html.escape(message.from_user.first_name or "")
+        username_safe = html.escape(message.from_user.username or "")
+        username_str = f"@{username_safe}" if username_safe else "немає"
+        
         text = (
             f"👤 <b>Новий користувач!</b>\n\n"
-            f"Ім'я: {message.from_user.first_name}\n"
+            f"Ім'я: {first_name_safe}\n"
             f"Username: {username_str}\n"
             f"ID: <code>{message.from_user.id}</code>"
         )
