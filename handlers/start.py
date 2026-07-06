@@ -180,6 +180,15 @@ def _localized(mapping: dict[str, str], lang: str) -> str:
     return mapping.get(lang, mapping["uk"])
 
 
+def _user_interface_lang(user: object | None) -> str:
+    language_code = (getattr(user, "language_code", None) or "").lower()
+    if language_code.startswith("en"):
+        return "en"
+    if language_code.startswith("ru"):
+        return "ru"
+    return "uk"
+
+
 def _extract_referrer_id(message: Message) -> int | None:
     text = (message.text or "").strip()
     parts = text.split(maxsplit=1)
@@ -288,7 +297,7 @@ async def command_start(message: Message, db: firestore.Client) -> None:
             exc,
         )
         await message.answer(
-            "Service is temporarily unavailable. Please try again a bit later."
+            get_text(_user_interface_lang(message.from_user), "service_temporarily_unavailable")
         )
         return
 
@@ -383,7 +392,7 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
         )
         if callback.message:
             await callback.message.answer(
-                "Service is temporarily unavailable. Please try again a bit later."
+                get_text(_user_interface_lang(callback.from_user), "service_temporarily_unavailable")
             )
         await callback.answer()
         return
