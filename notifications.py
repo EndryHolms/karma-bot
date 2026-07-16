@@ -83,6 +83,8 @@ _HOROSCOPE_SIGNS = {
 _HOROSCOPE_LANGS = ("uk", "en", "ru")
 _GENERATION_RETRY_DELAYS = (0, 30, 90)
 _DELIVERY_LOCK_STALE_MINUTES = 180
+_FIRESTORE_TIMEOUT_SECONDS = 30
+_DAILY_JOB_TIMEOUT_SECONDS = 10 * 60
 
 # Список тем для урізноманітнення гороскопів
 _DAILY_THEMES = [
@@ -136,6 +138,18 @@ def _daily_horoscope_doc(db: firestore.Client, date_key: str):
     return db.collection("daily_horoscopes").document(date_key)
 
 
+async def _load_users(db: firestore.Client) -> list[Any]:
+    def _read_sync() -> list[Any]:
+        return list(
+            db.collection("users").stream(timeout=_FIRESTORE_TIMEOUT_SECONDS)
+        )
+
+    return await asyncio.wait_for(
+        asyncio.to_thread(_read_sync),
+        timeout=_FIRESTORE_TIMEOUT_SECONDS + 5,
+    )
+
+
 async def _store_share_text(db: firestore.Client, user_id: str, text: str, date_key: str) -> None:
     def _write_sync() -> None:
         db.collection("users").document(user_id).set(
@@ -161,7 +175,9 @@ async def _mark_monthly_reminder_sent(db: firestore.Client, user_id: str, month_
 
 async def _get_cached_horoscope_payload(db: firestore.Client, date_key: str) -> dict[str, dict[str, str]] | None:
     def _read_sync() -> dict[str, dict[str, str]] | None:
-        snap = _daily_horoscope_doc(db, date_key).get()
+        snap = _daily_horoscope_doc(db, date_key).get(
+            timeout=_FIRESTORE_TIMEOUT_SECONDS
+        )
         if not snap.exists:
             return None
         data = snap.to_dict() or {}
@@ -215,7 +231,10 @@ async def _claim_delivery(db: firestore.Client, date_key: str, now: datetime) ->
 
         @firestore.transactional
         def _run(transaction: firestore.Transaction) -> bool:
-            snap = ref.get(transaction=transaction)
+            snap = ref.get(
+                transaction=transaction,
+                timeout=_FIRESTORE_TIMEOUT_SECONDS,
+            )
             data = snap.to_dict() or {}
 
             if data.get("delivery_completed_at"):
@@ -248,8 +267,10 @@ async def _mark_delivery_completed(db: firestore.Client, date_key: str, sent_cou
                 "delivery_completed_at": datetime.utcnow().isoformat(),
                 "delivery_sent_count": sent_count,
                 "delivery_error": firestore.DELETE_FIELD,
+                "delivery_started_at": firestore.DELETE_FIELD,
             },
             merge=True,
+            timeout=_FIRESTORE_TIMEOUT_SECONDS,
         )
 
     await asyncio.to_thread(_write_sync)
@@ -261,8 +282,10 @@ async def _mark_delivery_error(db: firestore.Client, date_key: str, message: str
             {
                 "delivery_error": message,
                 "delivery_failed_at": datetime.utcnow().isoformat(),
+                "delivery_started_at": firestore.DELETE_FIELD,
             },
             merge=True,
+            timeout=_FIRESTORE_TIMEOUT_SECONDS,
         )
 
     await asyncio.to_thread(_write_sync)
@@ -479,10 +502,10 @@ async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
     now = datetime.now(tz)
     today = now.date()
     month_key = now.strftime("%Y-%m")
-    users_ref = db.collection("users").stream()
+    users = await _load_users(db)
 
     count = 0
-    for doc in users_ref:
+    for doc in users:
         user_data = doc.to_dict() or {}
         user_id = doc.id
         lang = user_data.get("language", "uk")
@@ -517,7 +540,7 @@ async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
     logging.info("Monthly card reminders sent to %s users", count)
 
 
-async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any):
+async def _send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any):
     logging.info("Starting daily horoscope generation and broadcast")
 
     tz = pytz.timezone("Europe/Kyiv")
@@ -530,23 +553,25 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any)
     today_date = now.strftime("%d.%m")
     today_key = now.strftime("%Y-%m-%d")
 
-    payload = await _get_or_generate_horoscope_payload(db, tarot_model, today_key)
-    if not payload:
-        return
 
     claimed = await _claim_delivery(db, today_key, now)
     if not claimed:
         logging.info("Daily horoscope delivery already completed or currently locked for %s", today_key)
         return
 
-    me = await bot.get_me()
-    bot_link = f"https://t.me/{me.username}" if me.username else None
-
-    users_ref = db.collection("users").stream()
     count = 0
 
     try:
-        for doc in users_ref:
+        payload = await _get_or_generate_horoscope_payload(db, tarot_model, today_key)
+        if not payload:
+            await _mark_delivery_error(db, today_key, "Horoscope payload is unavailable")
+            return
+
+        me = await bot.get_me()
+        bot_link = f"https://t.me/{me.username}" if me.username else None
+        users = await _load_users(db)
+
+        for doc in users:
             user_data = doc.to_dict() or {}
             user_id = doc.id
             lang = user_data.get("language", "uk")
@@ -583,8 +608,36 @@ async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any)
                 logging.error("Horoscope send failed for %s: %s", user_id, exc)
 
         await _mark_delivery_completed(db, today_key, count)
+    except asyncio.CancelledError:
+        try:
+            await asyncio.wait_for(
+                _mark_delivery_error(db, today_key, "Daily horoscope job timed out"),
+                timeout=_FIRESTORE_TIMEOUT_SECONDS + 5,
+            )
+        except Exception as exc:
+            logging.warning(
+                "HOROSCOPE_TIMEOUT_UNLOCK_FAILED error_type=%s error=%s",
+                type(exc).__name__,
+                exc,
+            )
+        raise
     except Exception as exc:
         await _mark_delivery_error(db, today_key, str(exc))
         raise
 
     logging.info("Daily horoscope sent to %s users", count)
+
+
+async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any):
+    try:
+        await asyncio.wait_for(
+            _send_daily_horoscope(bot, db, tarot_model),
+            timeout=_DAILY_JOB_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logging.error(
+            "HOROSCOPE_JOB_TIMEOUT timeout_seconds=%s",
+            _DAILY_JOB_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logging.exception("HOROSCOPE_JOB_FAILED")
