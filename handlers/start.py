@@ -1,3 +1,4 @@
+import html
 import logging
 from urllib.parse import urlencode
 
@@ -303,8 +304,6 @@ async def command_start(message: Message, db: firestore.Client) -> None:
 
     if is_new:
         from handlers.admin import ADMIN_IDS
-        import html
-        
         logging.info("New user registered: %s", message.from_user.id)
         
         first_name_safe = html.escape(message.from_user.first_name or "")
@@ -360,7 +359,7 @@ async def process_language_selection(callback: CallbackQuery, db: firestore.Clie
 
     await callback.message.delete()
 
-    user_name = callback.from_user.first_name or "друже"
+    user_name = html.escape(callback.from_user.first_name or "друже")
     welcome_text = get_text(lang, "welcome_text").format(name=user_name)
     img_welcome = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png"
 
@@ -470,11 +469,13 @@ async def invite_friend(callback: CallbackQuery, db: firestore.Client) -> None:
         return
 
     link = f"https://t.me/{me.username}?start=ref_{callback.from_user.id}"
-    share_text = _localized(_REFERRAL_SHARE_TEXT, lang).format(link=link)
+    link_html = html.escape(link, quote=True)
+    link_text = html.escape(link)
+    share_text = _localized(_REFERRAL_SHARE_TEXT, lang).format(link=link_html)
     share_prompt = _localized(_REFERRAL_SHARE_PROMPT, lang)
     text = _localized(_REFERRAL_SCREEN, lang).format(
         bonus=REFERRAL_DAILY_BONUS,
-        link=link,
+        link=link_text,
         share_text=share_text,
     )
     share_url = "https://t.me/share/url?" + urlencode({"url": link, "text": share_prompt})
@@ -486,7 +487,11 @@ async def invite_friend(callback: CallbackQuery, db: firestore.Client) -> None:
         ]
     )
 
-    await callback.message.edit_text(text, reply_markup=invite_kb, parse_mode="HTML")
+    try:
+        await callback.message.edit_text(text, reply_markup=invite_kb, parse_mode="HTML")
+    except Exception as exc:
+        logging.error("Invite screen render failed user_id=%s error_type=%s error=%s", callback.from_user.id, type(exc).__name__, exc)
+        await callback.message.answer(text, reply_markup=invite_kb, parse_mode="HTML")
     await callback.answer()
 
 
