@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import re
 from datetime import datetime, timedelta
 from typing import Any
@@ -82,6 +83,11 @@ _HOROSCOPE_SIGNS = {
 }
 
 _HOROSCOPE_LANGS = ("uk", "en", "ru")
+_ADMIN_IDS = {
+    int(value.strip())
+    for value in os.getenv("ADMIN_IDS", "469764985").split(",")
+    if value.strip().isdigit()
+}
 _ZODIAC_EMOJIS = {
     "aries": "\u2648",
     "taurus": "\u2649",
@@ -247,10 +253,16 @@ async def _get_cached_horoscope_payload(db: firestore.Client, date_key: str) -> 
     return await asyncio.to_thread(_read_sync)
 
 
-async def _store_cached_horoscope_payload(db: firestore.Client, date_key: str, payload: dict[str, dict[str, str]]) -> None:
+async def _store_cached_horoscope_payload(
+    db: firestore.Client,
+    date_key: str,
+    payload: dict[str, dict[str, str]],
+    source: str = "gemini",
+) -> None:
     def _write_sync() -> None:
         _daily_horoscope_doc(db, date_key).set(
             {
+                "source": source,
                 "payload": payload,
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "generation_error": firestore.DELETE_FIELD,
@@ -259,6 +271,27 @@ async def _store_cached_horoscope_payload(db: firestore.Client, date_key: str, p
         )
 
     await asyncio.to_thread(_write_sync)
+
+async def _notify_admins_local_horoscope(bot: Bot, date_key: str, reason: str) -> None:
+    message = (
+        "\u26a0\ufe0f \u0412\u0438\u043a\u043e\u0440\u0438\u0441\u0442\u0430\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u0438\u0439 \u0433\u043e\u0440\u043e\u0441\u043a\u043e\u043f\n\n"
+        f"\u0414\u0430\u0442\u0430: {date_key}\n"
+        "Gemini \u043d\u0435 \u0437\u043c\u0456\u0433 \u0437\u0433\u0435\u043d\u0435\u0440\u0443\u0432\u0430\u0442\u0438 \u043d\u043e\u0432\u0438\u0439 \u0433\u043e\u0440\u043e\u0441\u043a\u043e\u043f, \u0442\u043e\u043c\u0443 \u0431\u043e\u0442 "
+        "\u043f\u0435\u0440\u0435\u0439\u0448\u043e\u0432 \u043d\u0430 \u0430\u0432\u0430\u0440\u0456\u0439\u043d\u0438\u0439 \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u0438\u0439 \u0442\u0435\u043a\u0441\u0442.\n\n"
+        f"\u041f\u0440\u0438\u0447\u0438\u043d\u0430: {reason}"
+    )
+    for admin_id in _ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, message)
+        except Exception as exc:
+            logging.warning(
+                "HOROSCOPE_ADMIN_ALERT_FAILED admin_id=%s error_type=%s error=%s",
+                admin_id,
+                type(exc).__name__,
+                exc,
+            )
+
+
 
 
 async def _set_generation_error(db: firestore.Client, date_key: str, message: str, attempt: int) -> None:
@@ -497,6 +530,7 @@ async def _get_or_generate_horoscope_payload(
     tarot_model: Any,
     date_key: str,
     fallback_model: Any | None = None,
+    bot: Bot | None = None,
 ) -> dict[str, dict[str, str]] | None:
     # Attempt to get from cache first
     try:
@@ -618,7 +652,12 @@ async def _get_or_generate_horoscope_payload(
         last_error,
     )
     try:
-        await _store_cached_horoscope_payload(db, date_key, payload)
+        await _store_cached_horoscope_payload(
+            db,
+            date_key,
+            payload,
+            source="local_fallback",
+        )
     except Exception as exc:
         logging.warning(
             "HOROSCOPE_LOCAL_FALLBACK_CACHE_FAILED date_key=%s error_type=%s error=%s",
@@ -626,6 +665,8 @@ async def _get_or_generate_horoscope_payload(
             type(exc).__name__,
             exc,
         )
+    if bot is not None:
+        await _notify_admins_local_horoscope(bot, date_key, last_error)
     return payload
 
 
@@ -706,6 +747,7 @@ async def _send_daily_horoscope(
             tarot_model,
             today_key,
             fallback_model,
+            bot,
         )
         if not payload:
             await _mark_delivery_error(db, today_key, "Horoscope payload is unavailable")
