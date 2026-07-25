@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -85,6 +86,7 @@ _GENERATION_RETRY_DELAYS = (0, 30, 90)
 _DELIVERY_LOCK_STALE_MINUTES = 180
 _FIRESTORE_TIMEOUT_SECONDS = 30
 _DAILY_JOB_TIMEOUT_SECONDS = 10 * 60
+_GENERATION_TIMEOUT_SECONDS = 180
 
 # Список тем для урізноманітнення гороскопів
 _DAILY_THEMES = [
@@ -395,10 +397,10 @@ def _parse_batch_horoscope(raw_text: str) -> dict[str, dict[str, dict[str, str]]
         if not lines:
             continue
             
-        date_key = lines[0].strip()
-        # Basic date format check YYYY-MM-DD
-        if len(date_key) < 10 or "-" not in date_key:
+        date_match = re.search(r"\d{4}-\d{2}-\d{2}", lines[0])
+        if not date_match:
             continue
+        date_key = date_match.group(0)
             
         content = "\n".join(lines[1:])
         
@@ -411,7 +413,12 @@ def _parse_batch_horoscope(raw_text: str) -> dict[str, dict[str, dict[str, str]]
     return results
 
 
-async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: Any, date_key: str) -> dict[str, dict[str, str]] | None:
+async def _get_or_generate_horoscope_payload(
+    db: firestore.Client,
+    tarot_model: Any,
+    date_key: str,
+    fallback_model: Any | None = None,
+) -> dict[str, dict[str, str]] | None:
     # Attempt to get from cache first
     try:
         cached = await _get_cached_horoscope_payload(db, date_key)
@@ -466,15 +473,32 @@ async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: 
             )
             return None
 
-    prompt = _build_horoscope_prompt(batch_configs)
-    
+    model_candidates = [tarot_model]
+    if fallback_model is not None and fallback_model is not tarot_model:
+        model_candidates.append(fallback_model)
+    today_config = next(config for config in batch_configs if config["date"] == date_key)
+
     last_error = ""
     for attempt, delay_seconds in enumerate(_GENERATION_RETRY_DELAYS, start=1):
         if delay_seconds:
             await asyncio.sleep(delay_seconds)
 
+        model = model_candidates[min(attempt - 1, len(model_candidates) - 1)]
+        attempt_configs = batch_configs if attempt == 1 else [today_config]
+        prompt = _build_horoscope_prompt(attempt_configs)
+        model_name = getattr(model, "model_name", type(model).__name__)
+        logging.info(
+            "Horoscope generation attempt=%s model=%s dates=%s",
+            attempt,
+            model_name,
+            ",".join(config["date"] for config in attempt_configs),
+        )
+
         try:
-            response = await asyncio.to_thread(tarot_model.generate_content, prompt)
+            response = await asyncio.wait_for(
+                asyncio.to_thread(model.generate_content, prompt),
+                timeout=_GENERATION_TIMEOUT_SECONDS,
+            )
             raw_text = getattr(response, "text", "").strip()
             if not raw_text:
                 raise ValueError("Gemini returned empty batch text")
@@ -482,14 +506,22 @@ async def _get_or_generate_horoscope_payload(db: firestore.Client, tarot_model: 
             batch_results = _parse_batch_horoscope(raw_text)
             if not batch_results:
                 raise ValueError("Could not parse any dates from batch")
+            if date_key not in batch_results:
+                raise ValueError(f"Generated batch does not contain current date {date_key}")
 
             for res_date, res_payload in batch_results.items():
                 await _store_cached_horoscope_payload(db, res_date, res_payload)
-            
-            return batch_results.get(date_key)
+
+            return batch_results[date_key]
         except Exception as exc:
             last_error = str(exc)
-            logging.error("Batch horoscope generation attempt %s failed: %s", attempt, exc)
+            logging.error(
+                "Batch horoscope generation attempt %s failed model=%s error_type=%s error=%s",
+                attempt,
+                model_name,
+                type(exc).__name__,
+                exc,
+            )
             await _set_generation_error(db, date_key, last_error, attempt)
 
     return None
@@ -540,7 +572,12 @@ async def send_monthly_card_reminders(bot: Bot, db: firestore.Client):
     logging.info("Monthly card reminders sent to %s users", count)
 
 
-async def _send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any):
+async def _send_daily_horoscope(
+    bot: Bot,
+    db: firestore.Client,
+    tarot_model: Any,
+    fallback_model: Any | None = None,
+):
     logging.info("Starting daily horoscope generation and broadcast")
 
     tz = pytz.timezone("Europe/Kyiv")
@@ -562,7 +599,12 @@ async def _send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any
     count = 0
 
     try:
-        payload = await _get_or_generate_horoscope_payload(db, tarot_model, today_key)
+        payload = await _get_or_generate_horoscope_payload(
+            db,
+            tarot_model,
+            today_key,
+            fallback_model,
+        )
         if not payload:
             await _mark_delivery_error(db, today_key, "Horoscope payload is unavailable")
             return
@@ -628,10 +670,15 @@ async def _send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any
     logging.info("Daily horoscope sent to %s users", count)
 
 
-async def send_daily_horoscope(bot: Bot, db: firestore.Client, tarot_model: Any):
+async def send_daily_horoscope(
+    bot: Bot,
+    db: firestore.Client,
+    tarot_model: Any,
+    fallback_model: Any | None = None,
+):
     try:
         await asyncio.wait_for(
-            _send_daily_horoscope(bot, db, tarot_model),
+            _send_daily_horoscope(bot, db, tarot_model, fallback_model),
             timeout=_DAILY_JOB_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:

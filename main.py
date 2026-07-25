@@ -73,6 +73,18 @@ async def main() -> None:
         model_name=model_name,
         system_instruction=KARMA_SYSTEM_PROMPT,
     )
+    fallback_model = None
+    if settings.fallback_model_name and settings.fallback_model_name != model_name:
+        fallback_model = genai.GenerativeModel(
+            model_name=settings.fallback_model_name,
+            system_instruction=KARMA_SYSTEM_PROMPT,
+        )
+    logging.info(
+        "Gemini models configured primary=%s fallback=%s",
+        model_name,
+        settings.fallback_model_name or "<none>",
+    )
+
 
     advice_model = genai.GenerativeModel(
         model_name=model_name,
@@ -104,14 +116,14 @@ async def main() -> None:
 
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     scheduler.add_job(send_monthly_card_reminders, trigger="cron", day=1, hour=12, minute=0, args=[bot, db])
-    scheduler.add_job(send_daily_horoscope, trigger="cron", hour=9, minute=0, args=[bot, db, tarot_model])
+    scheduler.add_job(send_daily_horoscope, trigger="cron", hour=9, minute=0, args=[bot, db, tarot_model, fallback_model])
     
     # Редундантна перевірка кожні 20 хв (Self-healing на випадок збоїв планувальника)
     scheduler.add_job(
         send_daily_horoscope, 
         trigger="interval", 
         minutes=20, 
-        args=[bot, db, tarot_model]
+        args=[bot, db, tarot_model, fallback_model]
     )
     
     scheduler.start()
@@ -121,7 +133,7 @@ async def main() -> None:
     now = datetime.now(tz)
     if now.hour >= 9:
         logging.info("It's past 09:00 AM. Checking for missed daily horoscope...")
-        asyncio.create_task(send_daily_horoscope(bot, db, tarot_model))
+        asyncio.create_task(send_daily_horoscope(bot, db, tarot_model, fallback_model))
 
     # Реєстрація сигналів для логування
     for sig in (signal.SIGTERM, signal.SIGINT):

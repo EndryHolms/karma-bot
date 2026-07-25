@@ -40,7 +40,7 @@ def load_settings() -> Settings:
         "GOOGLE_APPLICATION_CREDENTIALS_B64",
     )
     primary_model_name = os.getenv("PRIMARY_MODEL_NAME", "gemini-3.1-flash-lite").strip()
-    fallback_model_name = os.getenv("FALLBACK_MODEL_NAME", "gemini-1.5-pro").strip()
+    fallback_model_name = os.getenv("FALLBACK_MODEL_NAME", "gemini-2.5-flash-lite").strip()
 
     missing = [
         name
