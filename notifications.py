@@ -147,10 +147,11 @@ _EMERGENCY_HOROSCOPE_TEMPLATES = {
     ),
 }
 _GENERATION_RETRY_DELAYS = (0, 30, 90)
-_DELIVERY_LOCK_STALE_MINUTES = 180
+_HOROSCOPE_BATCH_DAYS = 1
+_DELIVERY_LOCK_STALE_MINUTES = 15
 _FIRESTORE_TIMEOUT_SECONDS = 30
 _DAILY_JOB_TIMEOUT_SECONDS = 10 * 60
-_GENERATION_TIMEOUT_SECONDS = 180
+_GENERATION_TIMEOUT_SECONDS = 60
 
 # Список тем для урізноманітнення гороскопів
 _DAILY_THEMES = [
@@ -546,12 +547,12 @@ async def _get_or_generate_horoscope_payload(
     if cached:
         return cached
 
-    # Not in cache, let's generate a batch of 7 days starting from today to save credits
+    # Generate only the requested day to keep Gemini response size and memory bounded.
     logging.info("Generating batch horoscopes starting from %s", date_key)
     
     start_dt = datetime.strptime(date_key, "%Y-%m-%d")
     batch_configs = []
-    for i in range(7):
+    for i in range(_HOROSCOPE_BATCH_DAYS):
         target_dt = start_dt + timedelta(days=i)
         t_key = target_dt.strftime("%Y-%m-%d")
         # Check if already cached (optional but good for efficiency)
@@ -609,8 +610,12 @@ async def _get_or_generate_horoscope_payload(
 
         try:
             response = await asyncio.wait_for(
-                asyncio.to_thread(model.generate_content, prompt),
-                timeout=_GENERATION_TIMEOUT_SECONDS,
+                asyncio.to_thread(
+                    model.generate_content,
+                    prompt,
+                    request_options={"timeout": _GENERATION_TIMEOUT_SECONDS},
+                ),
+                timeout=_GENERATION_TIMEOUT_SECONDS + 5,
             )
             raw_text = getattr(response, "text", "").strip()
             if not raw_text:
@@ -636,6 +641,18 @@ async def _get_or_generate_horoscope_payload(
                 exc,
             )
             await _set_generation_error(db, date_key, last_error, attempt)
+
+            timeout_error = isinstance(exc, asyncio.TimeoutError) or any(
+                marker in last_error.lower()
+                for marker in ("deadline exceeded", "timed out", "timeout")
+            )
+            if timeout_error:
+                logging.error(
+                    "HOROSCOPE_GENERATION_TIMEOUT date_key=%s model=%s; using local fallback",
+                    date_key,
+                    model_name,
+                )
+                break
 
             if "User location is not supported" in last_error:
                 logging.error(
