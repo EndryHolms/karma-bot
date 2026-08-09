@@ -11,6 +11,7 @@ from aiogram.exceptions import TelegramForbiddenError
 from firebase_admin import firestore
 
 from firebase_db import log_chat_message
+from gemini_runtime import generate_content
 from keyboards import main_menu_kb
 
 _MONTHLY_REMINDER_TEXT = {
@@ -151,7 +152,6 @@ _HOROSCOPE_BATCH_DAYS = 1
 _DELIVERY_LOCK_STALE_MINUTES = 15
 _FIRESTORE_TIMEOUT_SECONDS = 30
 _DAILY_JOB_TIMEOUT_SECONDS = 10 * 60
-_GENERATION_TIMEOUT_SECONDS = 60
 
 # Список тем для урізноманітнення гороскопів
 _DAILY_THEMES = [
@@ -609,14 +609,7 @@ async def _get_or_generate_horoscope_payload(
         )
 
         try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    model.generate_content,
-                    prompt,
-                    request_options={"timeout": _GENERATION_TIMEOUT_SECONDS},
-                ),
-                timeout=_GENERATION_TIMEOUT_SECONDS + 5,
-            )
+            response = await generate_content(model, prompt)
             raw_text = getattr(response, "text", "").strip()
             if not raw_text:
                 raise ValueError("Gemini returned empty batch text")

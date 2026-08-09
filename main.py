@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import google.generativeai as genai
@@ -57,6 +58,9 @@ def handle_exit(sig, frame):
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    asyncio.get_running_loop().set_default_executor(
+        ThreadPoolExecutor(max_workers=4, thread_name_prefix="karma-worker")
+    )
     settings = load_settings()
     db = await init_firestore(
         settings.firebase_cred_path,

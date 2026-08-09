@@ -33,6 +33,7 @@ from firebase_db import (
 from handlers.payment import send_stars_invoice
 from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
+from gemini_runtime import GEMINI_TIMEOUT_SECONDS, generate_content
 
 router = Router()
 
@@ -124,40 +125,37 @@ def _tarot_format_prompt(lang: str, target_language: str) -> str:
 
 
 async def _gemini_generate_text(model: Any, prompt: str) -> str:
-    def _call_sync() -> str:
-        try:
-            resp = model.generate_content(prompt, safety_settings=SAFETY_SETTINGS)
-            if not resp or not hasattr(resp, "candidates") or not resp.candidates:
-                return ""
-            return resp.text.strip()
-        except Exception as e:
-            print(f"GenAI Text Error: {e}")
+    try:
+        resp = await generate_content(model, prompt, safety_settings=SAFETY_SETTINGS)
+        if not resp or not hasattr(resp, "candidates") or not resp.candidates:
             return ""
-
-    return await asyncio.to_thread(_call_sync)
+        return resp.text.strip()
+    except Exception as e:
+        print(f"GenAI Text Error: {e}")
+        return ""
 
 
 async def _gemini_generate_with_audio(model: Any, prompt: str, audio_bytes: bytes) -> str:
-    def _call_sync() -> str:
-        fd, path = tempfile.mkstemp(suffix=".ogg")
-        os.close(fd)
+    fd, path = tempfile.mkstemp(suffix=".ogg")
+    os.close(fd)
+    try:
+        with open(path, "wb") as f:
+            f.write(audio_bytes)
+        uploaded = await asyncio.wait_for(
+            asyncio.to_thread(genai.upload_file, path),
+            timeout=GEMINI_TIMEOUT_SECONDS + 5,
+        )
+        resp = await generate_content(model, [prompt, uploaded], safety_settings=SAFETY_SETTINGS)
+        return resp.text.strip() if resp else ""
+    except Exception as e:
+        print(f"GenAI Audio Error: {e}")
+        return ""
+    finally:
         try:
-            with open(path, "wb") as f:
-                f.write(audio_bytes)
-            uploaded = genai.upload_file(path)
-            resp = model.generate_content([prompt, uploaded], safety_settings=SAFETY_SETTINGS)
-            return resp.text.strip() if resp else ""
-        except Exception as e:
-            print(f"GenAI Audio Error: {e}")
-            return ""
-        finally:
-            try:
-                os.remove(path)
-            except OSError:
-                pass
 
-    return await asyncio.to_thread(_call_sync)
-
+            os.remove(path)
+        except OSError:
+            pass
 
 async def _send_long(message: Message, text: str, reply_markup: Any = None, lang: str = "uk") -> None:
     limit = 4000

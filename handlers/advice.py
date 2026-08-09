@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 from typing import Any
 
@@ -24,6 +23,7 @@ from firebase_db import (
 from handlers.payment import send_stars_invoice
 from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
+from gemini_runtime import generate_content
 
 router = Router()
 
@@ -89,17 +89,14 @@ def _advice_format_prompt(lang: str, target_language: str) -> str:
 
 
 async def _gemini_text(model: Any, prompt: str) -> str:
-    def _sync() -> str:
-        try:
-            resp = model.generate_content(prompt, safety_settings=SAFETY_SETTINGS)
-            if not resp or not hasattr(resp, "candidates") or not resp.candidates:
-                return ""
-            return resp.text.strip()
-        except Exception as e:
-            print(f"Advice Gen Error: {e}")
+    try:
+        resp = await generate_content(model, prompt, safety_settings=SAFETY_SETTINGS)
+        if not resp or not hasattr(resp, "candidates") or not resp.candidates:
             return ""
-
-    return await asyncio.to_thread(_sync)
+        return resp.text.strip()
+    except Exception as e:
+        print(f"Advice Gen Error: {e}")
+        return ""
 
 
 @router.callback_query(F.data == CB_ADVICE)

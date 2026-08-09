@@ -17,6 +17,7 @@ from keyboards import back_to_menu_kb, matrix_upsell_kb, matrix_saved_dob_kb, CB
 from lexicon import get_text
 from utils.matrix_math import calculate_matrix
 from utils.matrix_image import generate_matrix_image
+from gemini_runtime import generate_content
 
 router = Router()
 
@@ -201,7 +202,6 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
         await state.update_data(matrix=matrix, dob=clean_dob)
 
         # 1. Генерація зображення (Pillow)
-        img_bytes = await asyncio.to_thread(generate_matrix_image, matrix, lang)
 
         # 2. Генерація тексту (Gemini)
         prompt = (
@@ -214,13 +214,14 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
             f"Відповідай {prompt_lang}. Звертайся до людини на 'ти'. Обсяг: приблизно 200-250 слів."
         )
 
-        response = await asyncio.to_thread(tarot_model.generate_content, prompt)
+        response = await generate_content(tarot_model, prompt)
         reply_text = response.text
 
         if not reply_text:
             raise ValueError("Empty response from AI")
 
         # Надсилаємо картинку
+        img_bytes = await asyncio.to_thread(generate_matrix_image, matrix, lang)
         await message.answer_photo(BufferedInputFile(img_bytes, filename="matrix.png"))
         
         # Видаляємо проміжне повідомлення
@@ -277,7 +278,7 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
             f"Відповідай {prompt_lang}. Стиль: сучасна містика. Обсяг: приблизно 200-250 слів."
         )
 
-        response = await asyncio.to_thread(tarot_model.generate_content, prompt)
+        response = await generate_content(tarot_model, prompt)
         reply_text = response.text
 
         await processing_msg.edit_text(reply_text, reply_markup=matrix_upsell_kb(lang), parse_mode="HTML")

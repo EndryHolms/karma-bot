@@ -64,6 +64,10 @@ class ThrottlingMiddleware(BaseMiddleware):
 
 
 class ChatLoggingMiddleware(BaseMiddleware):
+    def __init__(self, max_pending_logs: int = 50) -> None:
+        self.max_pending_logs = max_pending_logs
+        self._pending_logs: set[asyncio.Task[Any]] = set()
+
     async def _safe_log_chat_message(self, db: Any, user_id: int, text: str) -> None:
         try:
             await log_chat_message(
@@ -89,12 +93,17 @@ class ChatLoggingMiddleware(BaseMiddleware):
         if isinstance(event, Message) and event.text:
             db = data.get("db")
             if db and event.from_user:
-                asyncio.create_task(
-                    self._safe_log_chat_message(
-                        db=db,
-                        user_id=event.from_user.id,
-                        text=event.text,
+                if len(self._pending_logs) >= self.max_pending_logs:
+                    logger.warning("CHAT_HISTORY_QUEUE_FULL pending=%s", len(self._pending_logs))
+                else:
+                    task = asyncio.create_task(
+                        self._safe_log_chat_message(
+                            db=db,
+                            user_id=event.from_user.id,
+                            text=event.text,
+                        )
                     )
-                )
+                    self._pending_logs.add(task)
+                    task.add_done_callback(self._pending_logs.discard)
 
         return await handler(event, data)

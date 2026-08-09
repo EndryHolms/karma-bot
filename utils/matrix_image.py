@@ -17,7 +17,8 @@ def generate_matrix_image(matrix: dict[str, int], lang: str = "uk") -> bytes:
     bg_path = os.path.join(base_dir, "assets", "matrix", bg_filename)
     font_path = os.path.join(base_dir, "assets", "fonts", "Montserrat-Bold.ttf")
     
-    img = Image.open(bg_path).convert("RGBA")
+    with Image.open(bg_path) as source:
+        img = source.convert("RGBA")
     draw = ImageDraw.Draw(img)
     
     # 70 looks good for ~100px circles
