@@ -647,6 +647,13 @@ async def _get_or_generate_horoscope_payload(
                 )
                 break
 
+            if "high memory pressure" in last_error.lower():
+                logging.error(
+                    "HOROSCOPE_GENERATION_SKIPPED_MEMORY_PRESSURE date_key=%s; using local fallback",
+                    date_key,
+                )
+                break
+
             if "User location is not supported" in last_error:
                 logging.error(
                     "GEMINI_LOCATION_UNSUPPORTED date_key=%s model=%s; using local fallback",

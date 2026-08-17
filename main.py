@@ -25,6 +25,7 @@ from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
 from handlers.matrix import router as matrix_router
 from middleware import ChatLoggingMiddleware, ThrottlingMiddleware
+from gemini_runtime import memory_maintenance
 from notifications import send_daily_horoscope, send_monthly_card_reminders
 from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
@@ -117,6 +118,7 @@ async def main() -> None:
 
     port = int(os.environ.get("PORT", 8080))
     web_task = asyncio.create_task(_run_web_server(port))
+    memory_task = asyncio.create_task(memory_maintenance())
 
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     scheduler.add_job(send_monthly_card_reminders, trigger="cron", day=1, hour=12, minute=0, args=[bot, db])
@@ -124,9 +126,10 @@ async def main() -> None:
     
     # Редундантна перевірка кожні 20 хв (Self-healing на випадок збоїв планувальника)
     scheduler.add_job(
-        send_daily_horoscope, 
-        trigger="interval", 
-        minutes=20, 
+        send_daily_horoscope,
+        trigger="cron",
+        hour="9-12",
+        minute=20,
         args=[bot, db, tarot_model, fallback_model]
     )
     
@@ -150,7 +153,8 @@ async def main() -> None:
         await dp.start_polling(bot)
     finally:
         web_task.cancel()
-        await asyncio.gather(web_task, return_exceptions=True)
+        memory_task.cancel()
+        await asyncio.gather(web_task, memory_task, return_exceptions=True)
 
 
 if __name__ == "__main__":
