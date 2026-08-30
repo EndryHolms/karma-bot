@@ -26,7 +26,11 @@ from handlers.tarot import router as tarot_router
 from handlers.matrix import router as matrix_router
 from middleware import ChatLoggingMiddleware, ThrottlingMiddleware
 from gemini_runtime import memory_maintenance
-from notifications import send_daily_horoscope, send_monthly_card_reminders
+from notifications import (
+    prepare_daily_horoscope,
+    send_daily_horoscope,
+    send_monthly_card_reminders,
+)
 from prompts import KARMA_SYSTEM_PROMPT, UNIVERSE_ADVICE_SYSTEM_PROMPT
 
 SAFETY_SETTINGS = {
@@ -122,7 +126,25 @@ async def main() -> None:
 
     scheduler = AsyncIOScheduler(timezone="Europe/Kyiv")
     scheduler.add_job(send_monthly_card_reminders, trigger="cron", day=1, hour=12, minute=0, args=[bot, db])
-    scheduler.add_job(send_daily_horoscope, trigger="cron", hour=9, minute=0, args=[bot, db, tarot_model, fallback_model])
+    scheduler.add_job(
+        prepare_daily_horoscope,
+        trigger="cron",
+        hour=8,
+        minute="0,15,30,45",
+        args=[db, tarot_model, fallback_model],
+        id="daily_horoscope_pregeneration",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=10 * 60,
+    )
+    scheduler.add_job(
+        send_daily_horoscope,
+        trigger="cron",
+        hour=9,
+        minute=0,
+        args=[bot, db, tarot_model, fallback_model],
+        id="daily_horoscope_delivery",
+    )
     
     # Редундантна перевірка кожні 20 хв (Self-healing на випадок збоїв планувальника)
     scheduler.add_job(
@@ -138,7 +160,10 @@ async def main() -> None:
     # Catch-up: перевірка чи не пропущено гороскоп (якщо бот стартував після 09:00)
     tz = pytz.timezone("Europe/Kyiv")
     now = datetime.now(tz)
-    if now.hour >= 9:
+    if now.hour == 8:
+        logging.info("Checking horoscope pregeneration before 09:00...")
+        asyncio.create_task(prepare_daily_horoscope(db, tarot_model, fallback_model))
+    elif now.hour >= 9:
         logging.info("It's past 09:00 AM. Checking for missed daily horoscope...")
         asyncio.create_task(send_daily_horoscope(bot, db, tarot_model, fallback_model))
 

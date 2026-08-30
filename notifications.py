@@ -254,6 +254,20 @@ async def _get_cached_horoscope_payload(db: firestore.Client, date_key: str) -> 
     return await asyncio.to_thread(_read_sync)
 
 
+async def _get_last_generation_error(db: firestore.Client, date_key: str) -> str | None:
+    def _read_sync() -> str | None:
+        snap = _daily_horoscope_doc(db, date_key).get(
+            timeout=_FIRESTORE_TIMEOUT_SECONDS
+        )
+        if not snap.exists:
+            return None
+        data = snap.to_dict() or {}
+        error = data.get("generation_error")
+        return error if isinstance(error, str) and error.strip() else None
+
+    return await asyncio.to_thread(_read_sync)
+
+
 async def _store_cached_horoscope_payload(
     db: firestore.Client,
     date_key: str,
@@ -532,6 +546,10 @@ async def _get_or_generate_horoscope_payload(
     date_key: str,
     fallback_model: Any | None = None,
     bot: Bot | None = None,
+    *,
+    generate_if_missing: bool = True,
+    allow_local_fallback: bool = True,
+    generation_attempt_limit: int | None = None,
 ) -> dict[str, dict[str, str]] | None:
     # Attempt to get from cache first
     try:
@@ -546,6 +564,42 @@ async def _get_or_generate_horoscope_payload(
         return None
     if cached:
         return cached
+
+    if not generate_if_missing:
+        try:
+            last_error = await _get_last_generation_error(db, date_key)
+        except Exception as exc:
+            logging.warning(
+                "HOROSCOPE_GENERATION_ERROR_READ_FAILED date_key=%s error_type=%s error=%s",
+                date_key,
+                type(exc).__name__,
+                exc,
+            )
+            last_error = None
+        last_error = last_error or "No generated horoscope was ready by delivery time"
+        payload = _build_emergency_horoscope_payload(date_key)
+        logging.warning(
+            "HOROSCOPE_LOCAL_FALLBACK_USED date_key=%s last_error=%s",
+            date_key,
+            last_error,
+        )
+        try:
+            await _store_cached_horoscope_payload(
+                db,
+                date_key,
+                payload,
+                source="local_fallback",
+            )
+        except Exception as exc:
+            logging.warning(
+                "HOROSCOPE_LOCAL_FALLBACK_CACHE_FAILED date_key=%s error_type=%s error=%s",
+                date_key,
+                type(exc).__name__,
+                exc,
+            )
+        if bot is not None:
+            await _notify_admins_local_horoscope(bot, date_key, last_error)
+        return payload
 
     # Generate only the requested day to keep Gemini response size and memory bounded.
     logging.info("Generating batch horoscopes starting from %s", date_key)
@@ -593,7 +647,11 @@ async def _get_or_generate_horoscope_payload(
     today_config = next(config for config in batch_configs if config["date"] == date_key)
 
     last_error = ""
-    for attempt, delay_seconds in enumerate(_GENERATION_RETRY_DELAYS, start=1):
+    retry_delays = _GENERATION_RETRY_DELAYS
+    if generation_attempt_limit is not None:
+        retry_delays = retry_delays[:max(1, generation_attempt_limit)]
+
+    for attempt, delay_seconds in enumerate(retry_delays, start=1):
         if delay_seconds:
             await asyncio.sleep(delay_seconds)
 
@@ -661,6 +719,14 @@ async def _get_or_generate_horoscope_payload(
                     model_name,
                 )
                 break
+
+    if not allow_local_fallback:
+        logging.warning(
+            "HOROSCOPE_PREGENERATION_DEFERRED date_key=%s last_error=%s",
+            date_key,
+            last_error,
+        )
+        return None
 
     payload = _build_emergency_horoscope_payload(date_key)
     logging.warning(
@@ -765,6 +831,7 @@ async def _send_daily_horoscope(
             today_key,
             fallback_model,
             bot,
+            generate_if_missing=False,
         )
         if not payload:
             await _mark_delivery_error(db, today_key, "Horoscope payload is unavailable")
@@ -829,6 +896,49 @@ async def _send_daily_horoscope(
         raise
 
     logging.info("Daily horoscope sent to %s users", count)
+
+
+async def _prepare_daily_horoscope(
+    db: firestore.Client,
+    tarot_model: Any,
+    fallback_model: Any | None = None,
+) -> None:
+    tz = pytz.timezone("Europe/Kyiv")
+    now = datetime.now(tz)
+    date_key = now.strftime("%Y-%m-%d")
+    logging.info("Starting horoscope pregeneration for %s", date_key)
+
+    payload = await _get_or_generate_horoscope_payload(
+        db,
+        tarot_model,
+        date_key,
+        fallback_model,
+        allow_local_fallback=False,
+        generation_attempt_limit=1,
+    )
+    if payload:
+        logging.info("HOROSCOPE_PREGENERATION_READY date_key=%s", date_key)
+    else:
+        logging.warning("HOROSCOPE_PREGENERATION_NOT_READY date_key=%s", date_key)
+
+
+async def prepare_daily_horoscope(
+    db: firestore.Client,
+    tarot_model: Any,
+    fallback_model: Any | None = None,
+) -> None:
+    try:
+        await asyncio.wait_for(
+            _prepare_daily_horoscope(db, tarot_model, fallback_model),
+            timeout=_DAILY_JOB_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logging.error(
+            "HOROSCOPE_PREGENERATION_JOB_TIMEOUT timeout_seconds=%s",
+            _DAILY_JOB_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logging.exception("HOROSCOPE_PREGENERATION_JOB_FAILED")
 
 
 async def send_daily_horoscope(
