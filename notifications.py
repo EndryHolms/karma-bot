@@ -147,6 +147,35 @@ _EMERGENCY_HOROSCOPE_TEMPLATES = {
         "\u0421\u0435\u0433\u043e\u0434\u043d\u044f \u044e\u043c\u043e\u0440 \u043f\u043e\u043c\u043e\u0436\u0435\u0442 \u043f\u0440\u043e\u0439\u0442\u0438 \u0442\u0430\u043c, \u0433\u0434\u0435 \u0441\u0435\u0440\u044c\u0451\u0437\u043d\u043e\u0441\u0442\u044c \u0441\u043e\u0437\u0434\u0430\u0451\u0442 \u043b\u0438\u0448\u043d\u0438\u0435 \u043f\u0440\u0435\u043f\u044f\u0442\u0441\u0442\u0432\u0438\u044f.",
     ),
 }
+_EMERGENCY_HOROSCOPE_PUNCHLINES = {
+    "uk": (
+        "\u042f\u043a\u0449\u043e \u0445\u0442\u043e\u0441\u044c \u0441\u043a\u0430\u0436\u0435 \u00ab\u0446\u0435 \u043d\u0430 \u043f\u2019\u044f\u0442\u044c \u0445\u0432\u0438\u043b\u0438\u043d\u00bb, \u043f\u0435\u0440\u0435\u0432\u0456\u0440\u0442\u0435, \u0447\u0438 \u043d\u0435 \u0441\u0445\u043e\u0432\u0430\u0432 \u0432\u0456\u043d \u0437\u0430 \u0441\u043f\u0438\u043d\u043e\u044e \u0449\u0435 \u0442\u0440\u0438 \u0437\u0430\u0434\u0430\u0447\u0456.",
+        "\u041d\u0435 \u0431\u0435\u0440\u0456\u0442\u044c \u0447\u0443\u0436\u0438\u0439 \u0445\u0430\u043e\u0441 \u0432 \u043e\u0440\u0435\u043d\u0434\u0443 \u2014 \u0432\u043b\u0430\u0441\u043d\u0438\u0439 \u0441\u044c\u043e\u0433\u043e\u0434\u043d\u0456 \u0439 \u0442\u0430\u043a \u043f\u0440\u043e\u0441\u0438\u0442\u044c \u043e\u043a\u0440\u0435\u043c\u0443 \u043a\u0456\u043c\u043d\u0430\u0442\u0443.",
+        "\u042f\u043a\u0449\u043e \u043f\u043b\u0430\u043d \u0440\u043e\u0437\u0441\u0438\u043f\u043b\u0435\u0442\u044c\u0441\u044f, \u0437\u0440\u043e\u0431\u0456\u0442\u044c \u0432\u0438\u0433\u043b\u044f\u0434, \u0449\u043e \u0446\u0435 \u0431\u0443\u043b\u0430 \u0430\u0432\u0442\u043e\u0440\u0441\u044c\u043a\u0430 \u0434\u0435\u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0456\u044f.",
+        "\u041d\u0435 \u043a\u043e\u0436\u043d\u0435 \u0442\u0435\u0440\u043c\u0456\u043d\u043e\u0432\u0435 \u043f\u043e\u0432\u0456\u0434\u043e\u043c\u043b\u0435\u043d\u043d\u044f \u0441\u043f\u0440\u0430\u0432\u0434\u0456 \u0442\u0435\u0440\u043c\u0456\u043d\u043e\u0432\u0435; \u0456\u043d\u043e\u0434\u0456 \u0446\u0435 \u043f\u0440\u043e\u0441\u0442\u043e \u0447\u0443\u0436\u0430 \u0442\u0440\u0438\u0432\u043e\u0433\u0430 \u0437 \u0433\u0430\u0440\u043d\u0438\u043c \u0456\u043d\u0442\u0435\u0440\u043d\u0435\u0442\u043e\u043c.",
+        "\u041d\u0435 \u0441\u043f\u0435\u0440\u0435\u0447\u0430\u0439\u0442\u0435\u0441\u044f \u0437 \u0430\u0431\u0441\u0443\u0440\u0434\u043e\u043c \u0434\u043e \u043e\u0431\u0456\u0434\u0443 \u2014 \u0432\u0456\u043d \u043d\u0430 \u0434\u043e\u043c\u0430\u0448\u043d\u044c\u043e\u043c\u0443 \u043f\u043e\u043b\u0456 \u0439 \u043a\u0440\u0430\u0449\u0435 \u0437\u043d\u0430\u0454 \u043f\u0440\u0430\u0432\u0438\u043b\u0430.",
+        "\u0422\u0440\u0438\u043c\u0430\u0439\u0442\u0435 \u043f\u043e\u0440\u0443\u0447 \u0433\u0443\u043c\u043e\u0440 \u2014 \u0446\u0435 \u0454\u0434\u0438\u043d\u0438\u0439 \u0430\u043a\u0441\u0435\u0441\u0443\u0430\u0440, \u044f\u043a\u0438\u0439 \u043f\u0430\u0441\u0443\u0454 \u0456 \u0434\u043e \u0434\u0435\u0434\u043b\u0430\u0439\u043d\u0443, \u0456 \u0434\u043e \u043f\u043e\u0431\u0430\u0447\u0435\u043d\u043d\u044f.",
+        "\u0421\u044c\u043e\u0433\u043e\u0434\u043d\u0456 \u043f\u0435\u0440\u0435\u043c\u043e\u0436\u0435 \u043d\u0435 \u043d\u0430\u0439\u0433\u0443\u0447\u043d\u0456\u0448\u0438\u0439, \u0430 \u0442\u043e\u0439, \u0445\u0442\u043e \u0432\u0447\u0430\u0441\u043d\u043e \u0432\u0438\u043c\u043a\u043d\u0435 \u0441\u043f\u043e\u0432\u0456\u0449\u0435\u043d\u043d\u044f.",
+    ),
+    "en": (
+        "If someone says it will take five minutes, check whether they are hiding three more tasks behind their back.",
+        "Do not rent space to someone else's chaos; your own already wants a separate room.",
+        "If the plan falls apart, call it an intentional redesign and continue with confidence.",
+        "Not every urgent message is urgent; sometimes it is merely someone else's anxiety with excellent Wi-Fi.",
+        "Do not argue with absurdity before lunch; it has home-field advantage and knows the rules.",
+        "Keep humor nearby; it is the only accessory that works for both deadlines and dates.",
+        "Today the winner is not the loudest person, but the one who mutes notifications in time.",
+    ),
+    "ru": (
+        "\u0415\u0441\u043b\u0438 \u043a\u0442\u043e-\u0442\u043e \u0441\u043a\u0430\u0436\u0435\u0442 \u00ab\u044d\u0442\u043e \u043d\u0430 \u043f\u044f\u0442\u044c \u043c\u0438\u043d\u0443\u0442\u00bb, \u043f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435, \u043d\u0435 \u0441\u043f\u0440\u044f\u0442\u0430\u043b \u043b\u0438 \u043e\u043d \u0437\u0430 \u0441\u043f\u0438\u043d\u043e\u0439 \u0435\u0449\u0451 \u0442\u0440\u0438 \u0437\u0430\u0434\u0430\u0447\u0438.",
+        "\u041d\u0435 \u0431\u0435\u0440\u0438\u0442\u0435 \u0447\u0443\u0436\u043e\u0439 \u0445\u0430\u043e\u0441 \u0432 \u0430\u0440\u0435\u043d\u0434\u0443 \u2014 \u0432\u0430\u0448 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0438 \u0442\u0430\u043a \u043f\u0440\u043e\u0441\u0438\u0442 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u0443\u044e \u043a\u043e\u043c\u043d\u0430\u0442\u0443.",
+        "\u0415\u0441\u043b\u0438 \u043f\u043b\u0430\u043d \u0440\u0430\u0441\u0441\u044b\u043f\u043b\u0435\u0442\u0441\u044f, \u043d\u0430\u0437\u043e\u0432\u0438\u0442\u0435 \u044d\u0442\u043e \u0430\u0432\u0442\u043e\u0440\u0441\u043a\u043e\u0439 \u0434\u0435\u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0435\u0439 \u0438 \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0430\u0439\u0442\u0435 \u0441 \u0443\u0432\u0435\u0440\u0435\u043d\u043d\u044b\u043c \u0432\u0438\u0434\u043e\u043c.",
+        "\u041d\u0435 \u043a\u0430\u0436\u0434\u043e\u0435 \u0441\u0440\u043e\u0447\u043d\u043e\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0442\u0435\u043b\u044c\u043d\u043e \u0441\u0440\u043e\u0447\u043d\u043e\u0435; \u0438\u043d\u043e\u0433\u0434\u0430 \u044d\u0442\u043e \u043f\u0440\u043e\u0441\u0442\u043e \u0447\u0443\u0436\u0430\u044f \u0442\u0440\u0435\u0432\u043e\u0433\u0430 \u0441 \u0445\u043e\u0440\u043e\u0448\u0438\u043c \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442\u043e\u043c.",
+        "\u041d\u0435 \u0441\u043f\u043e\u0440\u044c\u0442\u0435 \u0441 \u0430\u0431\u0441\u0443\u0440\u0434\u043e\u043c \u0434\u043e \u043e\u0431\u0435\u0434\u0430 \u2014 \u043e\u043d \u0438\u0433\u0440\u0430\u0435\u0442 \u043d\u0430 \u0441\u0432\u043e\u0451\u043c \u043f\u043e\u043b\u0435 \u0438 \u043b\u0443\u0447\u0448\u0435 \u0437\u043d\u0430\u0435\u0442 \u043f\u0440\u0430\u0432\u0438\u043b\u0430.",
+        "\u0414\u0435\u0440\u0436\u0438\u0442\u0435 \u0440\u044f\u0434\u043e\u043c \u044e\u043c\u043e\u0440 \u2014 \u044d\u0442\u043e \u0435\u0434\u0438\u043d\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0430\u043a\u0441\u0435\u0441\u0441\u0443\u0430\u0440, \u043f\u043e\u0434\u0445\u043e\u0434\u044f\u0449\u0438\u0439 \u0438 \u043a \u0434\u0435\u0434\u043b\u0430\u0439\u043d\u0443, \u0438 \u043a \u0441\u0432\u0438\u0434\u0430\u043d\u0438\u044e.",
+        "\u0421\u0435\u0433\u043e\u0434\u043d\u044f \u043f\u043e\u0431\u0435\u0434\u0438\u0442 \u043d\u0435 \u0441\u0430\u043c\u044b\u0439 \u0433\u0440\u043e\u043c\u043a\u0438\u0439, \u0430 \u0442\u043e\u0442, \u043a\u0442\u043e \u0432\u043e\u0432\u0440\u0435\u043c\u044f \u043e\u0442\u043a\u043b\u044e\u0447\u0438\u0442 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f.",
+    ),
+}
 _GENERATION_RETRY_DELAYS = (0, 30, 90)
 _HOROSCOPE_BATCH_DAYS = 1
 _DELIVERY_LOCK_STALE_MINUTES = 15
@@ -406,15 +435,17 @@ def _build_horoscope_prompt(day_configs: list[dict[str, str]]) -> str:
     return (
         f"Generate daily horoscopes for the following dates and themes:\n{requests_str}\n\n"
         f"For EACH date, provide 3 sections: LANG:uk, LANG:en, LANG:ru. "
-        f"Tone: witty, ironic, life-like, with sharp sarcasm. Use unexpected metaphors. "
+        f"Tone: vivid, witty, warm, life-like, and lightly sarcastic. The reader should smile and recognize a real situation from everyday life. "
         f"STRICT RULE: You are FORBIDDEN from using standard zodiac clichés. "
         f"BANNED themes for Leo: kings, thrones, royalty, greatness, crowns, majesty. "
         f"BANNED themes for Taurus: food, eating, stubbornness. "
         f"BANNED themes for Pisces: crying, tears, dreams, magic. "
         f"BANNED themes for Scorpio: revenge, poison, darkness. "
-        f"Instead of astrology tropes, describe their day using purely mundane, random objects (cold coffee, Wi-Fi signals, broken zippers, tangled headphones, tax reports, missed alarms). "
-        f"CRITICAL: Do NOT repeat metaphors, themes, or sentence structures! Every single prediction across all dates and signs MUST be highly distinct and unique. "
-        f"The text for each sign must be exactly ONE medium-length sentence, punchy and unique. "
+        f"Instead of astrology tropes, build a tiny concrete scene from relationships, work, money, messages, plans, transport, home, or awkward social moments. Mundane objects may appear, but never force an object into every line. "
+        f"CRITICAL: Do NOT repeat plots, metaphors, openings, punchlines, advice, or sentence structures. Every prediction must feel written specifically for that sign, not like a generic motivational quote. "
+        f"The text for each sign must contain exactly TWO short sentences and 24-34 words total. Sentence one predicts a specific recognizable situation. Sentence two gives a useful, witty reaction or an ironic twist. "
+        f"Avoid vague phrases such as trust yourself, listen to your intuition, good things are coming, save your energy, or the universe has a plan. "
+        f"Keep sarcasm playful rather than insulting, cruel, gloomy, or fatalistic. Do not mention illness, death, disasters, or guaranteed financial outcomes. "
         f"Each language section must contain exactly 12 horoscope lines and no extra introduction or conclusion. "
         f"Use exactly this format inside each language section: zodiac emoji, localized sign name, space, hyphen, space, the sentence. "
         f"Put one empty line between lines. "
@@ -525,10 +556,13 @@ def _build_emergency_horoscope_payload(date_key: str) -> dict[str, dict[str, str
 
     for lang in _HOROSCOPE_LANGS:
         templates = _EMERGENCY_HOROSCOPE_TEMPLATES[lang]
+        punchlines = _EMERGENCY_HOROSCOPE_PUNCHLINES[lang]
         language_payload: dict[str, str] = {}
         lines: list[str] = []
         for index, (sign_key, sign_name) in enumerate(_HOROSCOPE_SIGNS[lang].items()):
             advice = templates[(date_seed + index) % len(templates)]
+            punchline = punchlines[(date_seed * 3 + index * 5) % len(punchlines)]
+            advice = f"{advice} {punchline}"
             line = f"{_ZODIAC_EMOJIS[sign_key]} {sign_name} \u2014 {advice}"
             language_payload[sign_key] = line
             lines.append(line)
