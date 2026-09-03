@@ -435,15 +435,18 @@ def _build_horoscope_prompt(day_configs: list[dict[str, str]]) -> str:
     return (
         f"Generate daily horoscopes for the following dates and themes:\n{requests_str}\n\n"
         f"For EACH date, provide 3 sections: LANG:uk, LANG:en, LANG:ru. "
-        f"Tone: vivid, witty, warm, life-like, and lightly sarcastic. The reader should smile and recognize a real situation from everyday life. "
+        f"Tone: vivid, witty, warm, and lightly sarcastic. Keep every prediction broadly relatable regardless of age, income, relationship status, housing, or employment. "
         f"STRICT RULE: You are FORBIDDEN from using standard zodiac clichés. "
         f"BANNED themes for Leo: kings, thrones, royalty, greatness, crowns, majesty. "
         f"BANNED themes for Taurus: food, eating, stubbornness. "
         f"BANNED themes for Pisces: crying, tears, dreams, magic. "
         f"BANNED themes for Scorpio: revenge, poison, darkness. "
-        f"Instead of astrology tropes, build a tiny concrete scene from relationships, work, money, messages, plans, transport, home, or awkward social moments. Mundane objects may appear, but never force an object into every line. "
+        f"Treat the supplied daily theme only as a loose mood, not as the subject for all signs; no more than TWO signs may directly use that theme. "
+        f"Distribute the signs across different universal areas: mood, a small choice, a conversation, rest, boundaries, curiosity, routine, creativity, patience, a pleasant surprise, and changing plans. "
+        f"Never assume the reader has a job, colleagues, salary, rent, bank card, car, romantic partner, children, or paid subscriptions. Avoid brand names and fabricated financial events. "
         f"CRITICAL: Do NOT repeat plots, metaphors, openings, punchlines, advice, or sentence structures. Every prediction must feel written specifically for that sign, not like a generic motivational quote. "
-        f"The text for each sign must contain exactly TWO short sentences and 24-34 words total. Sentence one predicts a specific recognizable situation. Sentence two gives a useful, witty reaction or an ironic twist. "
+        f"The text for each sign must be exactly ONE compact sentence of 12-20 words, containing both a recognizable moment and a witty useful twist. "
+        f"Address one reader informally in the singular: use «ти» in Ukrainian, 'you' in English, and «ты» in Russian; never use formal «ви/Вы». "
         f"Avoid vague phrases such as trust yourself, listen to your intuition, good things are coming, save your energy, or the universe has a plan. "
         f"Keep sarcasm playful rather than insulting, cruel, gloomy, or fatalistic. Do not mention illness, death, disasters, or guaranteed financial outcomes. "
         f"Each language section must contain exactly 12 horoscope lines and no extra introduction or conclusion. "
@@ -549,6 +552,44 @@ def _parse_batch_horoscope(raw_text: str) -> dict[str, dict[str, dict[str, str]]
     
     return results
 
+
+def _informalize_local_horoscope(text: str, lang: str) -> str:
+    replacements = {
+        "uk": {
+            "Оберіть": "Обери",
+            "зробіть": "зроби",
+            "Не поспішайте": "Не поспішай",
+            "Бережіть": "Бережи",
+            "Довіртеся": "Довірся",
+            "Не вимагайте": "Не вимагай",
+            "Знайдіть": "Знайди",
+            "від вас": "від тебе",
+            "перевірте": "перевір",
+            "Не беріть": "Не бери",
+            "Не сперечайтеся": "Не сперечайся",
+            "Тримайте": "Тримай",
+        },
+        "ru": {
+            "Выберите": "Выбери",
+            "сделайте": "сделай",
+            "Не спешите": "Не спеши",
+            "Берегите": "Береги",
+            "Доверьтесь": "Доверься",
+            "Не требуйте": "Не требуй",
+            "Найдите": "Найди",
+            "от вас": "от тебя",
+            "проверьте": "проверь",
+            "Не берите": "Не бери",
+            "Не спорьте": "Не спорь",
+            "Держите": "Держи",
+            "ваш собственный": "твой собственный",
+        },
+    }
+    for formal, informal in replacements.get(lang, {}).items():
+        text = text.replace(formal, informal)
+    return text
+
+
 def _build_emergency_horoscope_payload(date_key: str) -> dict[str, dict[str, str]]:
     """Build a complete localized horoscope when the external model is unavailable."""
     date_seed = int(date_key.replace("-", ""))
@@ -557,12 +598,12 @@ def _build_emergency_horoscope_payload(date_key: str) -> dict[str, dict[str, str
     for lang in _HOROSCOPE_LANGS:
         templates = _EMERGENCY_HOROSCOPE_TEMPLATES[lang]
         punchlines = _EMERGENCY_HOROSCOPE_PUNCHLINES[lang]
+        options = templates + punchlines
         language_payload: dict[str, str] = {}
         lines: list[str] = []
         for index, (sign_key, sign_name) in enumerate(_HOROSCOPE_SIGNS[lang].items()):
-            advice = templates[(date_seed + index) % len(templates)]
-            punchline = punchlines[(date_seed * 3 + index * 5) % len(punchlines)]
-            advice = f"{advice} {punchline}"
+            advice = options[(date_seed * 3 + index * 5) % len(options)]
+            advice = _informalize_local_horoscope(advice, lang)
             line = f"{_ZODIAC_EMOJIS[sign_key]} {sign_name} \u2014 {advice}"
             language_payload[sign_key] = line
             lines.append(line)
