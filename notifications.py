@@ -1,4 +1,5 @@
 import asyncio
+import html
 import logging
 import os
 import re
@@ -8,6 +9,7 @@ from typing import Any
 import pytz
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from firebase_admin import firestore
 
 from firebase_db import log_chat_message
@@ -89,6 +91,7 @@ _ADMIN_IDS = {
     for value in os.getenv("ADMIN_IDS", "469764985").split(",")
     if value.strip().isdigit()
 }
+HOROSCOPE_REGENERATE_CALLBACK_PREFIX = "admin:horoscope:regenerate"
 _ZODIAC_EMOJIS = {
     "aries": "\u2648",
     "taurus": "\u2649",
@@ -310,11 +313,106 @@ async def _store_cached_horoscope_payload(
                 "payload": payload,
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "generation_error": firestore.DELETE_FIELD,
+                "preview_sent_at": firestore.DELETE_FIELD,
             },
             merge=True,
         )
 
     await asyncio.to_thread(_write_sync)
+
+
+def build_admin_horoscope_preview(
+    date_key: str,
+    payload: dict[str, dict[str, str]],
+) -> str:
+    date_label = datetime.strptime(date_key, "%Y-%m-%d").strftime("%d.%m.%Y")
+    horoscope = html.escape(payload.get("uk", {}).get("all", ""))
+    return (
+        "🔎 <b>Попередній перегляд гороскопу</b>\n\n"
+        f"Дата: <b>{date_label}</b>\n"
+        "Якщо все гаразд — нічого не натискай, цей варіант піде в розсилку о 09:00. "
+        "Замінити його можна до 08:55.\n\n"
+        f"🔮 <b>Кармічний гороскоп:</b>\n\n{horoscope}"
+    )
+
+
+def admin_horoscope_preview_kb(date_key: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔄 Згенерувати інший",
+                    callback_data=f"{HOROSCOPE_REGENERATE_CALLBACK_PREFIX}:{date_key}",
+                )
+            ]
+        ]
+    )
+
+
+async def _claim_admin_preview(db: firestore.Client, date_key: str) -> bool:
+    def _tx_sync() -> bool:
+        ref = _daily_horoscope_doc(db, date_key)
+
+        @firestore.transactional
+        def _run(transaction: firestore.Transaction) -> bool:
+            snap = ref.get(transaction=transaction, timeout=_FIRESTORE_TIMEOUT_SECONDS)
+            data = snap.to_dict() or {}
+            if not data.get("payload") or data.get("preview_sent_at"):
+                return False
+            transaction.set(
+                ref,
+                {"preview_sent_at": datetime.utcnow().isoformat()},
+                merge=True,
+            )
+            return True
+
+        return _run(db.transaction())
+
+    return await asyncio.to_thread(_tx_sync)
+
+
+async def _release_admin_preview_claim(db: firestore.Client, date_key: str) -> None:
+    def _write_sync() -> None:
+        _daily_horoscope_doc(db, date_key).set(
+            {"preview_sent_at": firestore.DELETE_FIELD},
+            merge=True,
+            timeout=_FIRESTORE_TIMEOUT_SECONDS,
+        )
+
+    await asyncio.to_thread(_write_sync)
+
+
+async def notify_admins_horoscope_preview(
+    bot: Bot,
+    db: firestore.Client,
+    date_key: str,
+    payload: dict[str, dict[str, str]],
+) -> None:
+    if not await _claim_admin_preview(db, date_key):
+        return
+
+    sent_count = 0
+    for admin_id in _ADMIN_IDS:
+        try:
+            await bot.send_message(
+                admin_id,
+                build_admin_horoscope_preview(date_key, payload),
+                reply_markup=admin_horoscope_preview_kb(date_key),
+                parse_mode="HTML",
+            )
+            sent_count += 1
+        except Exception as exc:
+            logging.warning(
+                "HOROSCOPE_ADMIN_PREVIEW_FAILED admin_id=%s error_type=%s error=%s",
+                admin_id,
+                type(exc).__name__,
+                exc,
+            )
+
+    if sent_count == 0:
+        await _release_admin_preview_claim(db, date_key)
+    else:
+        logging.info("HOROSCOPE_ADMIN_PREVIEW_SENT date_key=%s admins=%s", date_key, sent_count)
 
 async def _notify_admins_local_horoscope(bot: Bot, date_key: str, reason: str) -> None:
     message = (
@@ -625,6 +723,7 @@ async def _get_or_generate_horoscope_payload(
     generate_if_missing: bool = True,
     allow_local_fallback: bool = True,
     generation_attempt_limit: int | None = None,
+    force_regenerate: bool = False,
 ) -> dict[str, dict[str, str]] | None:
     # Attempt to get from cache first
     try:
@@ -637,7 +736,7 @@ async def _get_or_generate_horoscope_payload(
             exc,
         )
         return None
-    if cached:
+    if cached and not force_regenerate:
         return cached
 
     if not generate_if_missing:
@@ -974,6 +1073,7 @@ async def _send_daily_horoscope(
 
 
 async def _prepare_daily_horoscope(
+    bot: Bot,
     db: firestore.Client,
     tarot_model: Any,
     fallback_model: Any | None = None,
@@ -993,18 +1093,20 @@ async def _prepare_daily_horoscope(
     )
     if payload:
         logging.info("HOROSCOPE_PREGENERATION_READY date_key=%s", date_key)
+        await notify_admins_horoscope_preview(bot, db, date_key, payload)
     else:
         logging.warning("HOROSCOPE_PREGENERATION_NOT_READY date_key=%s", date_key)
 
 
 async def prepare_daily_horoscope(
+    bot: Bot,
     db: firestore.Client,
     tarot_model: Any,
     fallback_model: Any | None = None,
 ) -> None:
     try:
         await asyncio.wait_for(
-            _prepare_daily_horoscope(db, tarot_model, fallback_model),
+            _prepare_daily_horoscope(bot, db, tarot_model, fallback_model),
             timeout=_DAILY_JOB_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
@@ -1014,6 +1116,32 @@ async def prepare_daily_horoscope(
         )
     except Exception:
         logging.exception("HOROSCOPE_PREGENERATION_JOB_FAILED")
+
+
+async def regenerate_daily_horoscope(
+    db: firestore.Client,
+    tarot_model: Any,
+    date_key: str,
+    fallback_model: Any | None = None,
+) -> dict[str, dict[str, str]] | None:
+    tz = pytz.timezone("Europe/Kyiv")
+    now = datetime.now(tz)
+    regeneration_deadline = now.replace(hour=8, minute=55, second=0, microsecond=0)
+    if date_key != now.strftime("%Y-%m-%d") or now >= regeneration_deadline:
+        raise ValueError("Цей гороскоп уже не можна змінити: розсилка почалася або дата минула.")
+
+    payload = await _get_or_generate_horoscope_payload(
+        db,
+        tarot_model,
+        date_key,
+        fallback_model,
+        allow_local_fallback=False,
+        generation_attempt_limit=1,
+        force_regenerate=True,
+    )
+    if payload:
+        await _claim_admin_preview(db, date_key)
+    return payload
 
 
 async def send_daily_horoscope(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -11,6 +12,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from firebase_admin import firestore
 
 from firebase_db import get_chat_history, get_referred_users, get_user, get_user_stats, set_balance
+from notifications import (
+    HOROSCOPE_REGENERATE_CALLBACK_PREFIX,
+    admin_horoscope_preview_kb,
+    build_admin_horoscope_preview,
+    regenerate_daily_horoscope,
+)
 
 router = Router()
 
@@ -159,6 +166,60 @@ async def admin_back(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     await _show_admin_home(callback)
+
+
+@router.callback_query(F.data.startswith(f"{HOROSCOPE_REGENERATE_CALLBACK_PREFIX}:"))
+async def admin_regenerate_horoscope(
+    callback: CallbackQuery,
+    db: firestore.Client,
+    tarot_model: Any,
+    fallback_model: Any | None = None,
+) -> None:
+    if not _is_admin(callback.from_user.id if callback.from_user else None):
+        await callback.answer("Недостатньо прав", show_alert=True)
+        return
+
+    date_key = (callback.data or "").rsplit(":", 1)[-1]
+    await callback.answer("Генерую новий варіант…")
+    if callback.message:
+        await callback.message.edit_reply_markup(reply_markup=None)
+
+    try:
+        payload = await regenerate_daily_horoscope(
+            db,
+            tarot_model,
+            date_key,
+            fallback_model,
+        )
+    except ValueError as exc:
+        if callback.message:
+            await callback.message.answer(str(exc))
+        return
+    except Exception as exc:
+        logging.exception("HOROSCOPE_ADMIN_REGENERATION_FAILED date_key=%s", date_key)
+        if callback.message:
+            await callback.message.edit_reply_markup(
+                reply_markup=admin_horoscope_preview_kb(date_key)
+            )
+            await callback.message.answer(
+                f"Не вдалося згенерувати новий варіант. Поточний гороскоп збережено.\nПричина: {type(exc).__name__}"
+            )
+        return
+
+    if not payload:
+        if callback.message:
+            await callback.message.edit_reply_markup(
+                reply_markup=admin_horoscope_preview_kb(date_key)
+            )
+            await callback.message.answer("Gemini не повернув новий гороскоп. Поточний варіант залишився без змін.")
+        return
+
+    if callback.message:
+        await callback.message.edit_text(
+            build_admin_horoscope_preview(date_key, payload),
+            reply_markup=admin_horoscope_preview_kb(date_key),
+            parse_mode="HTML",
+        )
 
 
 @router.callback_query(F.data == CB_ADMIN_STATS)

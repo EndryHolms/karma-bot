@@ -109,6 +109,7 @@ async def main() -> None:
     dp.workflow_data.update(
         db=db,
         tarot_model=tarot_model,
+        fallback_model=fallback_model,
         advice_model=advice_model,
         safety_settings=SAFETY_SETTINGS,
     )
@@ -131,7 +132,7 @@ async def main() -> None:
         trigger="cron",
         hour=8,
         minute="0,15,30,45",
-        args=[db, tarot_model, fallback_model],
+        args=[bot, db, tarot_model, fallback_model],
         id="daily_horoscope_pregeneration",
         max_instances=1,
         coalesce=True,
@@ -162,7 +163,7 @@ async def main() -> None:
     now = datetime.now(tz)
     if now.hour == 8:
         logging.info("Checking horoscope pregeneration before 09:00...")
-        asyncio.create_task(prepare_daily_horoscope(db, tarot_model, fallback_model))
+        asyncio.create_task(prepare_daily_horoscope(bot, db, tarot_model, fallback_model))
     elif now.hour >= 9:
         logging.info("It's past 09:00 AM. Checking for missed daily horoscope...")
         asyncio.create_task(send_daily_horoscope(bot, db, tarot_model, fallback_model))
