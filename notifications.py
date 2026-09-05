@@ -1,5 +1,7 @@
 import asyncio
+import hashlib
 import html
+import json
 import logging
 import os
 import re
@@ -92,6 +94,7 @@ _ADMIN_IDS = {
     if value.strip().isdigit()
 }
 HOROSCOPE_REGENERATE_CALLBACK_PREFIX = "admin:horoscope:regenerate"
+HOROSCOPE_SELECT_CALLBACK_PREFIX = "admin:horoscope:select"
 _ZODIAC_EMOJIS = {
     "aries": "\u2648",
     "taurus": "\u2649",
@@ -306,19 +309,79 @@ async def _store_cached_horoscope_payload(
     payload: dict[str, dict[str, str]],
     source: str = "gemini",
 ) -> None:
+    version_id = horoscope_payload_version_id(payload)
+
     def _write_sync() -> None:
-        _daily_horoscope_doc(db, date_key).set(
+        horoscope_ref = _daily_horoscope_doc(db, date_key)
+        version_ref = horoscope_ref.collection("versions").document(version_id)
+        batch = db.batch()
+        batch.set(
+            version_ref,
+            {
+                "payload": payload,
+                "source": source,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        batch.set(
+            horoscope_ref,
             {
                 "source": source,
                 "payload": payload,
+                "current_version_id": version_id,
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "generation_error": firestore.DELETE_FIELD,
                 "preview_sent_at": firestore.DELETE_FIELD,
             },
             merge=True,
         )
+        batch.commit()
 
     await asyncio.to_thread(_write_sync)
+
+
+def horoscope_payload_version_id(payload: dict[str, dict[str, str]]) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:12]
+
+
+async def ensure_current_horoscope_version(
+    db: firestore.Client,
+    date_key: str,
+) -> str | None:
+    def _write_sync() -> str | None:
+        horoscope_ref = _daily_horoscope_doc(db, date_key)
+        snap = horoscope_ref.get(timeout=_FIRESTORE_TIMEOUT_SECONDS)
+        if not snap.exists:
+            return None
+
+        data = snap.to_dict() or {}
+        payload = data.get("payload")
+        if not isinstance(payload, dict):
+            return None
+
+        version_id = horoscope_payload_version_id(payload)
+        version_ref = horoscope_ref.collection("versions").document(version_id)
+        batch = db.batch()
+        batch.set(
+            version_ref,
+            {
+                "payload": payload,
+                "source": data.get("source", "gemini"),
+                "created_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        batch.set(
+            horoscope_ref,
+            {"current_version_id": version_id},
+            merge=True,
+        )
+        batch.commit()
+        return version_id
+
+    return await asyncio.to_thread(_write_sync)
 
 
 def build_admin_horoscope_preview(
@@ -336,17 +399,35 @@ def build_admin_horoscope_preview(
     )
 
 
-def admin_horoscope_preview_kb(date_key: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def admin_horoscope_preview_kb(
+    date_key: str,
+    version_id: str | None = None,
+    *,
+    allow_regenerate: bool = True,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if version_id:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="✅ Використати цей варіант",
+                    callback_data=f"{HOROSCOPE_SELECT_CALLBACK_PREFIX}:{date_key}:{version_id}",
+                )
+            ]
+        )
+    if allow_regenerate:
+        regenerate_data = f"{HOROSCOPE_REGENERATE_CALLBACK_PREFIX}:{date_key}"
+        if version_id:
+            regenerate_data = f"{regenerate_data}:{version_id}"
+        rows.append(
             [
                 InlineKeyboardButton(
                     text="🔄 Згенерувати інший",
-                    callback_data=f"{HOROSCOPE_REGENERATE_CALLBACK_PREFIX}:{date_key}",
+                    callback_data=regenerate_data,
                 )
             ]
-        ]
-    )
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def _claim_admin_preview(db: firestore.Client, date_key: str) -> bool:
@@ -397,7 +478,10 @@ async def notify_admins_horoscope_preview(
             await bot.send_message(
                 admin_id,
                 build_admin_horoscope_preview(date_key, payload),
-                reply_markup=admin_horoscope_preview_kb(date_key),
+                reply_markup=admin_horoscope_preview_kb(
+                    date_key,
+                    horoscope_payload_version_id(payload),
+                ),
                 parse_mode="HTML",
             )
             sent_count += 1
@@ -1145,6 +1229,60 @@ async def regenerate_daily_horoscope(
     if payload:
         await _claim_admin_preview(db, date_key)
     return payload
+
+
+async def select_daily_horoscope_version(
+    db: firestore.Client,
+    date_key: str,
+    version_id: str,
+    admin_id: int,
+) -> None:
+    tz = pytz.timezone("Europe/Kyiv")
+    now = datetime.now(tz)
+    if date_key != now.strftime("%Y-%m-%d") or now.hour >= 9:
+        raise ValueError("Цей гороскоп уже не можна змінити: розсилка почалася або дата минула.")
+
+    def _tx_sync() -> None:
+        horoscope_ref = _daily_horoscope_doc(db, date_key)
+        version_ref = horoscope_ref.collection("versions").document(version_id)
+
+        @firestore.transactional
+        def _run(transaction: firestore.Transaction) -> None:
+            horoscope_snap = horoscope_ref.get(
+                transaction=transaction,
+                timeout=_FIRESTORE_TIMEOUT_SECONDS,
+            )
+            version_snap = version_ref.get(
+                transaction=transaction,
+                timeout=_FIRESTORE_TIMEOUT_SECONDS,
+            )
+            if not version_snap.exists:
+                raise LookupError("Збережену версію гороскопу не знайдено.")
+
+            horoscope_data = horoscope_snap.to_dict() or {}
+            if horoscope_data.get("delivery_started_at") or horoscope_data.get("delivery_completed_at"):
+                raise ValueError("Розсилка вже почалася, тому змінити гороскоп неможливо.")
+
+            version_data = version_snap.to_dict() or {}
+            payload = version_data.get("payload")
+            if not isinstance(payload, dict):
+                raise LookupError("Збережена версія гороскопу пошкоджена.")
+
+            transaction.set(
+                horoscope_ref,
+                {
+                    "payload": payload,
+                    "source": version_data.get("source", "gemini"),
+                    "current_version_id": version_id,
+                    "selected_by_admin": admin_id,
+                    "selected_at": datetime.utcnow().isoformat(),
+                },
+                merge=True,
+            )
+
+        _run(db.transaction())
+
+    await asyncio.to_thread(_tx_sync)
 
 
 async def send_daily_horoscope(

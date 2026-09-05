@@ -14,9 +14,13 @@ from firebase_admin import firestore
 from firebase_db import get_chat_history, get_referred_users, get_user, get_user_stats, set_balance
 from notifications import (
     HOROSCOPE_REGENERATE_CALLBACK_PREFIX,
+    HOROSCOPE_SELECT_CALLBACK_PREFIX,
     admin_horoscope_preview_kb,
     build_admin_horoscope_preview,
+    ensure_current_horoscope_version,
+    horoscope_payload_version_id,
     regenerate_daily_horoscope,
+    select_daily_horoscope_version,
 )
 
 router = Router()
@@ -179,10 +183,28 @@ async def admin_regenerate_horoscope(
         await callback.answer("Недостатньо прав", show_alert=True)
         return
 
-    date_key = (callback.data or "").rsplit(":", 1)[-1]
+    callback_suffix = (callback.data or "").removeprefix(
+        f"{HOROSCOPE_REGENERATE_CALLBACK_PREFIX}:"
+    )
+    callback_parts = callback_suffix.split(":", 1)
+    date_key = callback_parts[0]
+    previous_version_id = callback_parts[1] if len(callback_parts) == 2 else None
     await callback.answer("Генерую новий варіант…")
+    if not previous_version_id:
+        try:
+            previous_version_id = await ensure_current_horoscope_version(db, date_key)
+        except Exception:
+            logging.exception("HOROSCOPE_CURRENT_VERSION_ARCHIVE_FAILED date_key=%s", date_key)
     if callback.message:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.edit_reply_markup(
+            reply_markup=admin_horoscope_preview_kb(
+                date_key,
+                previous_version_id,
+                allow_regenerate=False,
+            )
+            if previous_version_id
+            else None
+        )
 
     try:
         payload = await regenerate_daily_horoscope(
@@ -199,7 +221,7 @@ async def admin_regenerate_horoscope(
         logging.exception("HOROSCOPE_ADMIN_REGENERATION_FAILED date_key=%s", date_key)
         if callback.message:
             await callback.message.edit_reply_markup(
-                reply_markup=admin_horoscope_preview_kb(date_key)
+                reply_markup=admin_horoscope_preview_kb(date_key, previous_version_id)
             )
             await callback.message.answer(
                 f"Не вдалося згенерувати новий варіант. Поточний гороскоп збережено.\nПричина: {type(exc).__name__}"
@@ -209,17 +231,58 @@ async def admin_regenerate_horoscope(
     if not payload:
         if callback.message:
             await callback.message.edit_reply_markup(
-                reply_markup=admin_horoscope_preview_kb(date_key)
+                reply_markup=admin_horoscope_preview_kb(date_key, previous_version_id)
             )
             await callback.message.answer("Gemini не повернув новий гороскоп. Поточний варіант залишився без змін.")
         return
 
     if callback.message:
+        version_id = horoscope_payload_version_id(payload)
         await callback.message.answer(
             build_admin_horoscope_preview(date_key, payload),
-            reply_markup=admin_horoscope_preview_kb(date_key),
+            reply_markup=admin_horoscope_preview_kb(date_key, version_id),
             parse_mode="HTML",
         )
+
+
+@router.callback_query(F.data.startswith(f"{HOROSCOPE_SELECT_CALLBACK_PREFIX}:"))
+async def admin_select_horoscope_version(
+    callback: CallbackQuery,
+    db: firestore.Client,
+) -> None:
+    if not _is_admin(callback.from_user.id if callback.from_user else None):
+        await callback.answer("Недостатньо прав", show_alert=True)
+        return
+
+    callback_suffix = (callback.data or "").removeprefix(
+        f"{HOROSCOPE_SELECT_CALLBACK_PREFIX}:"
+    )
+    callback_parts = callback_suffix.split(":", 1)
+    if len(callback_parts) != 2:
+        await callback.answer("Некоректна версія гороскопу", show_alert=True)
+        return
+
+    date_key, version_id = callback_parts
+    try:
+        await select_daily_horoscope_version(
+            db,
+            date_key,
+            version_id,
+            callback.from_user.id,
+        )
+    except (LookupError, ValueError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    except Exception:
+        logging.exception(
+            "HOROSCOPE_ADMIN_SELECTION_FAILED date_key=%s version_id=%s",
+            date_key,
+            version_id,
+        )
+        await callback.answer("Не вдалося вибрати цей варіант", show_alert=True)
+        return
+
+    await callback.answer("✅ Цей варіант обрано для розсилки", show_alert=True)
 
 
 @router.callback_query(F.data == CB_ADMIN_STATS)
