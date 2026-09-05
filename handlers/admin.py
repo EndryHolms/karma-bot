@@ -215,7 +215,7 @@ async def admin_regenerate_horoscope(
         return
 
     if callback.message:
-        await callback.message.edit_text(
+        await callback.message.answer(
             build_admin_horoscope_preview(date_key, payload),
             reply_markup=admin_horoscope_preview_kb(date_key),
             parse_mode="HTML",
