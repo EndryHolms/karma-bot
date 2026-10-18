@@ -8,7 +8,7 @@ from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SendMessage, SendPhoto
 
-from lexicon import get_text
+from utils.navigation import is_disposable_menu_text
 
 
 class MainMenuLifecycleMiddleware(BaseRequestMiddleware):
@@ -32,9 +32,7 @@ class MainMenuLifecycleMiddleware(BaseRequestMiddleware):
             try:
                 snapshot = await asyncio.to_thread(reference.get)
                 previous = snapshot.to_dict() or {}
-                disposable = (result.text or "").strip() in {
-                    get_text(lang, "main_menu_title") for lang in ("uk", "en", "ru")
-                }
+                disposable = is_disposable_menu_text(result.text)
                 await asyncio.to_thread(reference.set, {
                     "message_id": result.message_id,
                     "disposable": disposable,

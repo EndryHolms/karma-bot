@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import tempfile
 from datetime import datetime
@@ -34,6 +35,7 @@ from handlers.payment import send_stars_invoice
 from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, CB_READING_CANCEL, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
 from gemini_runtime import GEMINI_TIMEOUT_SECONDS, generate_content
+from utils.navigation import send_next_screen
 
 router = Router()
 
@@ -226,11 +228,12 @@ async def _start_paid_reading(
     await state.update_data(reading_key=reading_key, price=price, action_key=action_key)
 
     if callback.message:
-        await callback.message.answer(
+        prompt_message = await send_next_screen(
+            callback.message,
             get_text(lang, prompt_key),
-            reply_markup=back_to_menu_kb(lang, callback_data=CB_READING_CANCEL),
-            parse_mode="HTML",
+            back_to_menu_kb(lang, callback_data=CB_READING_CANCEL),
         )
+        await state.update_data(reading_prompt_message_id=prompt_message.message_id)
 
 
 @router.callback_query(F.data == CB_DAILY)
@@ -386,6 +389,12 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         print(f"Reading Context Error: {e}")
 
     await msg.delete()
+    prompt_message_id = data.get("reading_prompt_message_id")
+    if prompt_message_id:
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=prompt_message_id)
+        except Exception:
+            logging.warning("Could not remove completed reading input prompt", exc_info=True)
 
     if not text:
         if message.from_user.id not in ADMIN_IDS:

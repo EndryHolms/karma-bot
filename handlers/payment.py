@@ -111,11 +111,12 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
         
         prompt_key = "ask_love_context" if reading_key == "relationship" else "ask_career_context"
         
-        await message.answer(
+        prompt_message = await message.answer(
             f"<b>Баланс поповнено!</b>\n\n{get_text(lang, prompt_key)}",
             reply_markup=back_to_menu_kb(lang, callback_data=CB_READING_CANCEL),
             parse_mode="HTML"
         )
+        await state.update_data(reading_prompt_message_id=prompt_message.message_id)
         return
 
     elif payload.startswith("advice:"):

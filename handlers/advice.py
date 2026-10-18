@@ -24,6 +24,7 @@ from handlers.payment import send_stars_invoice
 from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
 from gemini_runtime import generate_content
+from utils.navigation import send_next_screen
 
 router = Router()
 
@@ -144,9 +145,10 @@ async def ask_advice_start(callback: CallbackQuery, state: FSMContext, db: fires
     await state.update_data(price=ADVICE_PRICE, action_key=action_key)
 
     if callback.message:
-        await callback.message.answer(
+        await send_next_screen(
+            callback.message,
             get_text(lang, "ask_question"),
-            reply_markup=back_to_menu_kb(lang),
+            back_to_menu_kb(lang),
         )
 
 
