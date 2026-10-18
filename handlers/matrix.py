@@ -28,6 +28,8 @@ MATRIX_UPSELL_PRICE = 50
 
 def _matrix_result_header(lang: str, dob: str, title_key: str) -> str:
     title = escape(get_text(lang, title_key))
+    if title_key != "matrix_result_title":
+        return f"<b>{title}</b>"
     date_label = escape(get_text(lang, "matrix_result_dob").format(dob=dob))
     return f"<b>{title}</b>\n{date_label}"
 
