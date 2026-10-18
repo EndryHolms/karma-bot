@@ -27,6 +27,7 @@ from keyboards import (
     main_menu_kb,
 )
 from lexicon import get_text
+from utils.navigation import send_next_screen
 
 router = Router()
 
@@ -428,10 +429,7 @@ async def profile(callback: CallbackQuery, db: firestore.Client) -> None:
     )
 
     if callback.message:
-        try:
-            await callback.message.edit_text(text, reply_markup=profile_kb, parse_mode="HTML")
-        except Exception:
-            await callback.message.answer(text, reply_markup=profile_kb, parse_mode="HTML")
+        await send_next_screen(callback.message, text, profile_kb)
     await callback.answer()
 
 
@@ -445,10 +443,10 @@ async def change_language_from_profile(callback: CallbackQuery, db: firestore.Cl
     user_data = doc.to_dict() or {}
     lang = user_data.get("language", "uk")
 
-    await callback.message.edit_text(
+    await send_next_screen(
+        callback.message,
         _localized(_LANGUAGE_PROMPT, lang),
-        reply_markup=language_selection_kb(prefix=LANG_PROFILE_PREFIX),
-        parse_mode="HTML",
+        language_selection_kb(prefix=LANG_PROFILE_PREFIX),
     )
     await callback.answer()
 
@@ -487,11 +485,7 @@ async def invite_friend(callback: CallbackQuery, db: firestore.Client) -> None:
         ]
     )
 
-    try:
-        await callback.message.edit_text(text, reply_markup=invite_kb, parse_mode="HTML")
-    except Exception as exc:
-        logging.error("Invite screen render failed user_id=%s error_type=%s error=%s", callback.from_user.id, type(exc).__name__, exc)
-        await callback.message.answer(text, reply_markup=invite_kb, parse_mode="HTML")
+    await send_next_screen(callback.message, text, invite_kb)
     await callback.answer()
 
 
@@ -511,14 +505,7 @@ async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, st
     kb = main_menu_kb(lang)
 
     if callback.message:
-        try:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
-            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+        await send_next_screen(callback.message, text, kb)
     await callback.answer()
 
 
@@ -578,14 +565,7 @@ async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, stat
     kb = main_menu_kb(lang)
 
     if callback.message:
-        try:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
-            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+        await send_next_screen(callback.message, text, kb)
     await callback.answer()
 
 @router.message(F.text, StateFilter(None))

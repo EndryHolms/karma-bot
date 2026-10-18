@@ -18,6 +18,7 @@ from keyboards import back_to_menu_kb, matrix_upsell_kb, matrix_saved_dob_kb, CB
 from lexicon import get_text
 from utils.matrix_math import calculate_matrix
 from utils.matrix_image import generate_matrix_image
+from utils.navigation import send_next_screen
 from gemini_runtime import generate_content
 
 router = Router()
@@ -82,25 +83,8 @@ async def start_matrix(callback: CallbackQuery, state: FSMContext, db: firestore
         text = get_text(lang, "matrix_intro")
         kb = back_to_menu_kb(lang)
     
-    try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=kb,
-            parse_mode="HTML",
-        )
-    except Exception:
-        try:
-            await callback.message.edit_caption(
-                caption=text,
-                reply_markup=kb,
-                parse_mode="HTML",
-            )
-        except Exception:
-            await callback.message.answer(
-                text,
-                reply_markup=kb,
-                parse_mode="HTML",
-            )
+    date_prompt = await send_next_screen(callback.message, text, kb)
+    await state.update_data(matrix_date_prompt_id=date_prompt.message_id)
     await callback.answer()
 
 
@@ -143,17 +127,7 @@ async def use_saved_dob(callback: CallbackQuery, state: FSMContext, db: firestor
         
     await callback.answer()
     
-    class FakeMessage:
-        def __init__(self, msg, text):
-            self._msg = msg
-            self.from_user = msg.from_user
-            self.text = text
-        async def answer(self, *args, **kwargs):
-            return await self._msg.answer(*args, **kwargs)
-        async def answer_photo(self, *args, **kwargs):
-            return await self._msg.answer_photo(*args, **kwargs)
-            
-    await _execute_saved_dob_logic(FakeMessage(callback.message, clean_dob), clean_dob, user_id, state, db, tarot_model, lang)
+    await _execute_saved_dob_logic(callback.message, clean_dob, user_id, state, db, tarot_model, lang)
 
 
 @router.message(MatrixStates.waiting_for_dob)
@@ -213,6 +187,15 @@ async def process_dob(message: Message, state: FSMContext, db: firestore.Client,
 
 
 async def _process_matrix_generation(message: Message, clean_dob: str, user_id: int, state: FSMContext, db: firestore.Client, tarot_model: Any, lang: str, action_key: str):
+    data = await state.get_data()
+    date_prompt_id = data.get("matrix_date_prompt_id")
+    if date_prompt_id:
+        try:
+            await message.bot.edit_message_reply_markup(
+                chat_id=message.chat.id, message_id=date_prompt_id, reply_markup=None,
+            )
+        except Exception:
+            logging.warning("Could not retire Matrix date selection for user %s", user_id, exc_info=True)
     processing_msg = await message.answer(get_text(lang, "matrix_processing"), parse_mode="HTML")
 
     prompt_lang_map = {
@@ -259,6 +242,12 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
             caption=_matrix_result_header(lang, clean_dob, "matrix_result_title"),
             parse_mode="HTML",
         )
+        if date_prompt_id:
+            try:
+                await message.bot.delete_message(chat_id=message.chat.id, message_id=date_prompt_id)
+                await state.update_data(matrix_date_prompt_id=None)
+            except Exception:
+                logging.warning("Could not remove completed Matrix date prompt for user %s", user_id, exc_info=True)
         
         # Видаляємо проміжне повідомлення
         await processing_msg.delete()
@@ -277,7 +266,6 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
         await log_chat_message(db, user_id, "bot", reply_text)
 
     except Exception as e:
-        import logging
         logging.error(f"Matrix of Destiny error for user {user_id}: {e}", exc_info=True)
         await processing_msg.edit_text(
             get_text(lang, "error_energy_flows"),
