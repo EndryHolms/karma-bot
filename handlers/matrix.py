@@ -42,6 +42,15 @@ def _matrix_result_text(lang: str, dob: str, title_key: str, body: str) -> str:
     )
 
 
+def _without_matrix_menu_prompt(html_text: str) -> str:
+    for lang in ("uk", "en", "ru"):
+        prompt = escape(get_text(lang, "matrix_explore_next"))
+        for suffix in (f"\n\n<b>{prompt}</b>", f"\n\n{prompt}"):
+            if html_text.rstrip().endswith(suffix):
+                return html_text.rstrip()[:-len(suffix)].rstrip()
+    return html_text
+
+
 class MatrixStates(StatesGroup):
     waiting_for_dob = State()
 
@@ -397,11 +406,16 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     if user_id not in ADMIN_IDS:
         await increment_balance(db, user_id, -MATRIX_UPSELL_PRICE)
     
-    # Прибираємо клавіатуру на поточному повідомленні
+    # Прибираємо і меню, і запитання, яке стосується його кнопок.
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
+        html_text = callback.message.html_text
+        clean_text = _without_matrix_menu_prompt(html_text)
+        if clean_text != html_text:
+            await callback.message.edit_text(clean_text, parse_mode="HTML", reply_markup=None)
+        else:
+            await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
-        pass
+        logging.warning("Could not retire Matrix menu for user %s", user_id, exc_info=True)
         
     await execute_matrix_upsell(
         user_id, callback.message, channel, dob, matrix, db, tarot_model, lang,
