@@ -19,6 +19,7 @@ from lexicon import get_text
 from utils.matrix_math import calculate_matrix
 from utils.matrix_image import generate_matrix_image
 from utils.navigation import send_next_screen
+from utils.matrix_context import parse_matrix_context
 from gemini_runtime import generate_content
 
 router = Router()
@@ -268,11 +269,13 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
         result_text = _matrix_result_text(lang, clean_dob, "matrix_result_title", reply_text)
         matrix_result = await message.answer(
             result_text,
-            reply_markup=matrix_upsell_kb(lang),
             parse_mode="HTML",
             reply_parameters=ReplyParameters(message_id=matrix_photo.message_id, allow_sending_without_reply=True),
         )
         await state.update_data(matrix_result_message_id=matrix_result.message_id)
+        await matrix_result.edit_reply_markup(
+            reply_markup=matrix_upsell_kb(lang, dob=clean_dob, matrix_message_id=matrix_result.message_id),
+        )
         
         await log_chat_message(db, user_id, "user", f"[Matrix of Destiny DOB: {clean_dob}]")
         await log_chat_message(db, user_id, "bot", reply_text)
@@ -346,7 +349,7 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
 
         await processing_msg.edit_text(
             _matrix_result_text(lang, dob, title_key, reply_text),
-            reply_markup=matrix_upsell_kb(lang, opened_channel=channel),
+            reply_markup=matrix_upsell_kb(lang, opened_channel=channel, dob=dob, matrix_message_id=matrix_message_id),
             parse_mode="HTML",
         )
         
@@ -361,7 +364,7 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
         await release_ai_action_lock(db, user_id, action_key)
 
 
-@router.callback_query(F.data.in_([CB_MATRIX_FINANCE, CB_MATRIX_LOVE]))
+@router.callback_query(F.data.in_([CB_MATRIX_FINANCE, CB_MATRIX_LOVE]) | F.data.startswith(CB_MATRIX_FINANCE + ":") | F.data.startswith(CB_MATRIX_LOVE + ":"))
 async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: firestore.Client, tarot_model: Any) -> None:
     if not callback.from_user or not callback.message:
         return
@@ -373,6 +376,12 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     dob = data.get("dob")
     matrix = data.get("matrix")
     matrix_message_id = data.get("matrix_result_message_id")
+    context = parse_matrix_context(callback.data or "")
+    if context:
+        dob, matrix_message_id = context
+        matrix = calculate_matrix(dob)
+    elif len((callback.data or "").split(":")) != 2:
+        dob = None
 
     if not dob or not matrix_message_id:
         await _retire_matrix_menu(callback.message)
@@ -382,7 +391,8 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     if not matrix:
         matrix = calculate_matrix(dob)
         
-    channel = "finance" if callback.data == CB_MATRIX_FINANCE else "love"
+    channel = (callback.data or "").split(":")[1]
+    await state.update_data(dob=dob, matrix=matrix, matrix_result_message_id=matrix_message_id)
     
     from handlers.payment import send_stars_invoice
     
@@ -395,7 +405,7 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
             title=get_text(lang, title_key),
             description=get_text(lang, desc_key),
             amount_stars=MATRIX_UPSELL_PRICE,
-            payload=f"matrix:{channel}:{MATRIX_UPSELL_PRICE}"
+            payload=f"matrix:{channel}:{MATRIX_UPSELL_PRICE}:{dob}:{matrix_message_id}"
         )
         return
         
@@ -412,14 +422,30 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     await callback.answer()
 
 
-@router.callback_query(F.data == CB_MATRIX_CLOSE)
+@router.callback_query((F.data == CB_MATRIX_CLOSE) | F.data.startswith(CB_MATRIX_CLOSE + ":"))
 async def matrix_close_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
     if not callback.from_user or not callback.message:
         return
 
     lang = await get_user_language(db, callback.from_user.id)
     
-    await _retire_matrix_menu(callback.message)
+    context = parse_matrix_context(callback.data or "")
+    if not context:
+        data = await state.get_data()
+        if data.get("dob") and data.get("matrix_result_message_id"):
+            context = (data["dob"], data["matrix_result_message_id"])
+    if context and callback.message.reply_markup:
+        available = {
+            button.callback_data.split(":")[1]
+            for row in callback.message.reply_markup.inline_keyboard for button in row
+            if button.callback_data and button.callback_data.split(":")[:2] in (["matrix", "finance"], ["matrix", "love"])
+        }
+        opened_channel = "finance" if "finance" not in available else "love" if "love" not in available else None
+        await callback.message.edit_reply_markup(
+            reply_markup=matrix_upsell_kb(lang, hide_back=True, opened_channel=opened_channel, dob=context[0], matrix_message_id=context[1]),
+        )
+    else:
+        await _retire_matrix_menu(callback.message)
         
     await state.clear()
     await release_ai_action_lock(db, callback.from_user.id)

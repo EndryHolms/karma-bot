@@ -139,23 +139,33 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
 
     elif payload.startswith("matrix:"):
         from handlers.matrix import execute_matrix_upsell
+        from utils.matrix_context import parse_matrix_context
+        from utils.matrix_math import calculate_matrix
         parts = payload.split(":")
         channel = parts[1]
         price = int(parts[2])
         
-        await increment_balance(db, message.from_user.id, -price)
-        
         data = await state.get_data()
         dob = data.get("dob")
         matrix = data.get("matrix")
+        matrix_message_id = data.get("matrix_result_message_id")
+        if len(parts) == 5:
+            context = parse_matrix_context(f"matrix:{channel}:{parts[3]}:{parts[4]}")
+            if context:
+                dob, matrix_message_id = context
+                matrix = calculate_matrix(dob)
+            else:
+                dob = None
         
         if not dob or not matrix:
             await message.answer(get_text(lang, "matrix_payment_success_data_lost"), parse_mode="HTML")
             return
+
+        await increment_balance(db, message.from_user.id, -price)
             
         await execute_matrix_upsell(
             message.from_user.id, message, channel, dob, matrix, db, tarot_model, lang,
-            matrix_message_id=data.get("matrix_result_message_id"),
+            matrix_message_id=matrix_message_id,
         )
         return
 

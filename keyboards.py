@@ -51,14 +51,15 @@ def back_to_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
     )
 
 
-def matrix_upsell_kb(lang: str = "uk", hide_back: bool = False, opened_channel: str | None = None) -> InlineKeyboardMarkup:
+def matrix_upsell_kb(lang: str = "uk", hide_back: bool = False, opened_channel: str | None = None, dob: str | None = None, matrix_message_id: int | None = None) -> InlineKeyboardMarkup:
+    context = f":{dob}:{matrix_message_id}" if dob and matrix_message_id else ""
     kb = []
     if opened_channel != "finance":
-        kb.append([InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE)])
+        kb.append([InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE + context)])
     if opened_channel != "love":
-        kb.append([InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE)])
+        kb.append([InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE + context)])
     if not hide_back:
-        kb.append([InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_MATRIX_CLOSE)])
+        kb.append([InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_MATRIX_CLOSE + context)])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
