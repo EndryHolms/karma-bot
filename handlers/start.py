@@ -505,7 +505,12 @@ async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, st
     kb = main_menu_kb(lang)
 
     if callback.message:
-        await send_next_screen(callback.message, text, kb)
+        keyboard = callback.message.reply_markup
+        is_profile = bool(keyboard and any(
+            button.callback_data in (CB_INVITE_FRIEND, CB_CHANGE_LANGUAGE)
+            for row in keyboard.inline_keyboard for button in row
+        ))
+        await send_next_screen(callback.message, text, kb, delete_previous=is_profile)
     await callback.answer()
 
 
