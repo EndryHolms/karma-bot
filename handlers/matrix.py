@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import datetime
+from html import escape
 from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, BufferedInputFile
+from aiogram.types import CallbackQuery, Message, BufferedInputFile, ReplyParameters
 from firebase_admin import firestore
 
 from firebase_db import claim_ai_action_lock, get_user_language, log_chat_message, release_ai_action_lock, get_balance, increment_balance
@@ -23,6 +24,20 @@ router = Router()
 
 CB_MATRIX = "matrix:start"
 MATRIX_UPSELL_PRICE = 50
+
+
+def _matrix_result_header(lang: str, dob: str, title_key: str) -> str:
+    title = escape(get_text(lang, title_key))
+    date_label = escape(get_text(lang, "matrix_result_dob").format(dob=dob))
+    return f"<b>{title}</b>\n{date_label}"
+
+
+def _matrix_result_text(lang: str, dob: str, title_key: str, body: str) -> str:
+    return (
+        f"{_matrix_result_header(lang, dob, title_key)}\n\n{body.strip()}"
+        f"\n\n<b>{escape(get_text(lang, 'matrix_explore_next'))}</b>"
+    )
+
 
 class MatrixStates(StatesGroup):
     waiting_for_dob = State()
@@ -212,6 +227,11 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
             f"Напиши містичну, глибоку, але сучасну розшифровку цих двох енергій (Портрет і Характер). "
             f"Використовуй езотеричний, але зрозумілий стиль. Форматування має бути красивим, з емодзі. "
             f"Відповідай {prompt_lang}. Звертайся до людини на 'ти'. Обсяг: приблизно 200-250 слів."
+            " Це продовження розмови: без привітання, звертання на кшталт 'шукачу істини', "
+            "самопрезентації, вступу та прощання. Починай одразу з розділу про Портрет, "
+            "потім окремий розділ про Характер/Центр. Розділяй абзаци порожніми рядками. "
+            "Загальний заголовок, дату та кнопки додає застосунок, не повторюй їх. "
+            "Використовуй лише Telegram HTML: <b>, <i>; без Markdown."
         )
 
         response = await generate_content(tarot_model, prompt)
@@ -222,13 +242,24 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
 
         # Надсилаємо картинку
         img_bytes = await asyncio.to_thread(generate_matrix_image, matrix, lang)
-        await message.answer_photo(BufferedInputFile(img_bytes, filename="matrix.png"))
+        matrix_photo = await message.answer_photo(
+            BufferedInputFile(img_bytes, filename="matrix.png"),
+            caption=_matrix_result_header(lang, clean_dob, "matrix_result_title"),
+            parse_mode="HTML",
+        )
         
         # Видаляємо проміжне повідомлення
         await processing_msg.delete()
         
         # Надсилаємо текст з кнопками Upsell
-        await message.answer(reply_text, reply_markup=matrix_upsell_kb(lang), parse_mode="HTML")
+        result_text = _matrix_result_text(lang, clean_dob, "matrix_result_title", reply_text)
+        matrix_result = await message.answer(
+            result_text,
+            reply_markup=matrix_upsell_kb(lang),
+            parse_mode="HTML",
+            reply_parameters=ReplyParameters(message_id=matrix_photo.message_id, allow_sending_without_reply=True),
+        )
+        await state.update_data(matrix_result_message_id=matrix_result.message_id)
         
         await log_chat_message(db, user_id, "user", f"[Matrix of Destiny DOB: {clean_dob}]")
         await log_chat_message(db, user_id, "bot", reply_text)
@@ -246,7 +277,7 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
         await state.set_state(None)
 
 
-async def execute_matrix_upsell(user_id: int, message: Message, channel: str, dob: str, matrix: dict, db: firestore.Client, tarot_model: Any, lang: str):
+async def execute_matrix_upsell(user_id: int, message: Message, channel: str, dob: str, matrix: dict, db: firestore.Client, tarot_model: Any, lang: str, matrix_message_id: int | None = None):
     """
     Виконує безпосередню генерацію Upsell розбору (фінанси або стосунки).
     Викликається з handlers/matrix.py або з handlers/payment.py
@@ -257,7 +288,16 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
         await message.answer(get_text(lang, "error_energy_flows"), parse_mode="HTML")
         return
 
-    processing_msg = await message.answer(get_text(lang, "matrix_upsell_processing"), parse_mode="HTML")
+    title_key = "matrix_finance_title" if channel == "finance" else "matrix_love_title"
+    reply_parameters = (
+        ReplyParameters(message_id=matrix_message_id, allow_sending_without_reply=True)
+        if matrix_message_id else None
+    )
+    processing_msg = await message.answer(
+        f"{_matrix_result_header(lang, dob, title_key)}\n\n{get_text(lang, 'matrix_upsell_processing')}",
+        parse_mode="HTML",
+        reply_parameters=reply_parameters,
+    )
 
     prompt_lang_map = {
         "uk": "українською мовою",
@@ -276,12 +316,24 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
             f"Карма {matrix.get('karma')}, Соціум {matrix.get('social')}, Центр {matrix.get('center')}.\n\n"
             f"Зроби глибокий аналіз {topic} на основі цих енергій. "
             f"Відповідай {prompt_lang}. Стиль: сучасна містика. Обсяг: приблизно 200-250 слів."
+            " Це продовження готової Матриці: без привітання, звертання, вступу, "
+            "самопрезентації та прощання. Починай одразу з аналізу обраного каналу. "
+            "Зроби короткі змістовні підзаголовки та розділяй абзаци порожніми рядками. "
+            "Загальний заголовок, дату та кнопки додає застосунок, не повторюй їх. "
+            "Використовуй лише Telegram HTML: <b>, <i>; без Markdown."
         )
 
         response = await generate_content(tarot_model, prompt)
         reply_text = response.text
 
-        await processing_msg.edit_text(reply_text, reply_markup=matrix_upsell_kb(lang), parse_mode="HTML")
+        if not reply_text:
+            raise ValueError("Empty response from AI")
+
+        await processing_msg.edit_text(
+            _matrix_result_text(lang, dob, title_key, reply_text),
+            reply_markup=matrix_upsell_kb(lang),
+            parse_mode="HTML",
+        )
         
         await log_chat_message(db, user_id, "user", f"[Matrix Upsell {channel}]")
         await log_chat_message(db, user_id, "bot", reply_text)
@@ -345,7 +397,10 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     except Exception:
         pass
         
-    await execute_matrix_upsell(user_id, callback.message, channel, dob, matrix, db, tarot_model, lang)
+    await execute_matrix_upsell(
+        user_id, callback.message, channel, dob, matrix, db, tarot_model, lang,
+        matrix_message_id=data.get("matrix_result_message_id", callback.message.message_id),
+    )
     await callback.answer()
 
 

@@ -153,7 +153,10 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
             await message.answer(get_text(lang, "matrix_payment_success_data_lost"), parse_mode="HTML")
             return
             
-        await execute_matrix_upsell(message.from_user.id, message, channel, dob, matrix, db, tarot_model, lang)
+        await execute_matrix_upsell(
+            message.from_user.id, message, channel, dob, matrix, db, tarot_model, lang,
+            matrix_message_id=data.get("matrix_result_message_id"),
+        )
         return
 
     elif payload.startswith("matrix_slot:"):
