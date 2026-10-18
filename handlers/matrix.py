@@ -9,7 +9,7 @@ from typing import Any
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, BufferedInputFile, ReplyParameters, InlineKeyboardMarkup
+from aiogram.types import CallbackQuery, Message, BufferedInputFile, ReplyParameters
 from firebase_admin import firestore
 
 from firebase_db import claim_ai_action_lock, get_user_language, log_chat_message, release_ai_action_lock, get_balance, increment_balance
@@ -50,6 +50,18 @@ def _without_matrix_menu_prompt(html_text: str) -> str:
             if html_text.rstrip().endswith(suffix):
                 return html_text.rstrip()[:-len(suffix)].rstrip()
     return html_text
+
+
+async def _retire_matrix_menu(message: Message) -> None:
+    html_text = message.html_text
+    clean_text = _without_matrix_menu_prompt(html_text)
+    try:
+        if clean_text != html_text:
+            await message.edit_text(clean_text, parse_mode="HTML", reply_markup=None)
+        else:
+            await message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        logging.warning("Could not retire Matrix result menu", exc_info=True)
 
 
 class MatrixStates(StatesGroup):
@@ -360,13 +372,10 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     data = await state.get_data()
     dob = data.get("dob")
     matrix = data.get("matrix")
-    
-    if not dob:
-        doc = await asyncio.to_thread(lambda: db.collection("users").document(str(user_id)).get())
-        user_data = doc.to_dict() or {}
-        dob = user_data.get("matrix_dob")
-        
-    if not dob:
+    matrix_message_id = data.get("matrix_result_message_id")
+
+    if not dob or not matrix_message_id:
+        await _retire_matrix_menu(callback.message)
         await callback.answer(get_text(lang, "matrix_data_lost_alert"), show_alert=True)
         return
         
@@ -394,20 +403,11 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     if user_id not in ADMIN_IDS:
         await increment_balance(db, user_id, -MATRIX_UPSELL_PRICE)
     
-    # Прибираємо і меню, і запитання, яке стосується його кнопок.
-    try:
-        html_text = callback.message.html_text
-        clean_text = _without_matrix_menu_prompt(html_text)
-        if clean_text != html_text:
-            await callback.message.edit_text(clean_text, parse_mode="HTML", reply_markup=None)
-        else:
-            await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        logging.warning("Could not retire Matrix menu for user %s", user_id, exc_info=True)
+    await _retire_matrix_menu(callback.message)
         
     await execute_matrix_upsell(
         user_id, callback.message, channel, dob, matrix, db, tarot_model, lang,
-        matrix_message_id=data.get("matrix_result_message_id", callback.message.message_id),
+        matrix_message_id=matrix_message_id,
     )
     await callback.answer()
 
@@ -419,19 +419,7 @@ async def matrix_close_handler(callback: CallbackQuery, db: firestore.Client, st
 
     lang = await get_user_language(db, callback.from_user.id)
     
-    # Прибираємо кнопку Назад, залишаємо канали
-    try:
-        keyboard = callback.message.reply_markup
-        rows = [
-            [button for button in row if button.callback_data != CB_MATRIX_CLOSE]
-            for row in keyboard.inline_keyboard
-        ] if keyboard else []
-        rows = [row for row in rows if row]
-        await callback.message.edit_reply_markup(
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
-        )
-    except Exception:
-        pass
+    await _retire_matrix_menu(callback.message)
         
     await state.clear()
     await release_ai_action_lock(db, callback.from_user.id)
