@@ -25,6 +25,7 @@ from handlers.start import router as start_router
 from handlers.tarot import router as tarot_router
 from handlers.matrix import router as matrix_router
 from middleware import ChatLoggingMiddleware, ThrottlingMiddleware
+from utils.menu_lifecycle import MainMenuLifecycleMiddleware
 from gemini_runtime import memory_maintenance
 from notifications import (
     prepare_daily_horoscope,
@@ -101,6 +102,7 @@ async def main() -> None:
     )
 
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot.session.middleware(MainMenuLifecycleMiddleware(db))
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.update.middleware(ThrottlingMiddleware(rate_limit=3.0))
