@@ -31,7 +31,7 @@ from firebase_db import (
     release_daily_card_slot,
 )
 from handlers.payment import send_stars_invoice
-from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, back_to_menu_kb, main_menu_kb
+from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, CB_READING_CANCEL, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
 from gemini_runtime import GEMINI_TIMEOUT_SECONDS, generate_content
 
@@ -228,7 +228,7 @@ async def _start_paid_reading(
     if callback.message:
         await callback.message.answer(
             get_text(lang, prompt_key),
-            reply_markup=back_to_menu_kb(lang),
+            reply_markup=back_to_menu_kb(lang, callback_data=CB_READING_CANCEL),
             parse_mode="HTML",
         )
 

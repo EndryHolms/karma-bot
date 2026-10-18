@@ -8,6 +8,7 @@ CB_CAREER = "menu:career"
 CB_ADVICE = "menu:advice"
 CB_PROFILE = "menu:profile"
 CB_BACK_MENU = "menu:back"
+CB_READING_CANCEL = "reading:cancel"
 CB_CLOSE = "menu:close"
 CB_CHANGE_ZODIAC = "change_zodiac"
 CB_SHARE_HOROSCOPE = "horoscope:share"
@@ -43,10 +44,10 @@ def main_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
     )
 
 
-def back_to_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
+def back_to_menu_kb(lang: str = "uk", callback_data: str = CB_BACK_MENU) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_BACK_MENU)]
+            [InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=callback_data)]
         ]
     )
 

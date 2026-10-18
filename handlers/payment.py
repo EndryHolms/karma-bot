@@ -9,7 +9,7 @@ from firebase_admin import firestore
 
 from firebase_db import ensure_user, increment_balance, get_user_language, claim_ai_action_lock
 from lexicon import get_text
-from keyboards import back_to_menu_kb
+from keyboards import back_to_menu_kb, CB_READING_CANCEL
 
 
 router = Router()
@@ -113,7 +113,7 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
         
         await message.answer(
             f"<b>Баланс поповнено!</b>\n\n{get_text(lang, prompt_key)}",
-            reply_markup=back_to_menu_kb(lang),
+            reply_markup=back_to_menu_kb(lang, callback_data=CB_READING_CANCEL),
             parse_mode="HTML"
         )
         return

@@ -20,6 +20,7 @@ from firebase_db import (
 )
 from keyboards import (
     CB_BACK_MENU,
+    CB_READING_CANCEL,
     CB_CLOSE,
     CB_CHANGE_ZODIAC,
     CB_PROFILE,
@@ -489,7 +490,7 @@ async def invite_friend(callback: CallbackQuery, db: firestore.Client) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data == CB_BACK_MENU)
+@router.callback_query((F.data == CB_BACK_MENU) | (F.data == CB_READING_CANCEL))
 async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, state: FSMContext) -> None:
     if not callback.from_user:
         return
@@ -510,7 +511,10 @@ async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, st
             button.callback_data in (CB_INVITE_FRIEND, CB_CHANGE_LANGUAGE)
             for row in keyboard.inline_keyboard for button in row
         ))
-        await send_next_screen(callback.message, text, kb, delete_previous=is_profile)
+        await send_next_screen(
+            callback.message, text, kb,
+            delete_previous=is_profile or callback.data == CB_READING_CANCEL,
+        )
     await callback.answer()
 
 
