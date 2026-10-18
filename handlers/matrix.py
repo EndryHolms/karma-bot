@@ -9,7 +9,7 @@ from typing import Any
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, BufferedInputFile, ReplyParameters
+from aiogram.types import CallbackQuery, Message, BufferedInputFile, ReplyParameters, InlineKeyboardMarkup
 from firebase_admin import firestore
 
 from firebase_db import claim_ai_action_lock, get_user_language, log_chat_message, release_ai_action_lock, get_balance, increment_balance
@@ -33,8 +33,9 @@ def _matrix_result_header(lang: str, dob: str, title_key: str) -> str:
 
 
 def _matrix_result_text(lang: str, dob: str, title_key: str, body: str) -> str:
+    header = "" if title_key == "matrix_result_title" else f"{_matrix_result_header(lang, dob, title_key)}\n\n"
     return (
-        f"{_matrix_result_header(lang, dob, title_key)}\n\n{body.strip()}"
+        f"{header}{body.strip()}"
         f"\n\n<b>{escape(get_text(lang, 'matrix_explore_next'))}</b>"
     )
 
@@ -316,6 +317,9 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
             f"Карма {matrix.get('karma')}, Соціум {matrix.get('social')}, Центр {matrix.get('center')}.\n\n"
             f"Зроби глибокий аналіз {topic} на основі цих енергій. "
             f"Відповідай {prompt_lang}. Стиль: сучасна містика. Обсяг: приблизно 200-250 слів."
+            " Звертайся до однієї людини виключно на 'ти' та в однині відповідною мовою: "
+            "ти/твій/твоя, ты/твой/твоя, you/your. Не використовуй ввічливе 'ви/Вы' "
+            "або 'ваш/Ваш'."
             " Це продовження готової Матриці: без привітання, звертання, вступу, "
             "самопрезентації та прощання. Починай одразу з аналізу обраного каналу. "
             "Зроби короткі змістовні підзаголовки та розділяй абзаци порожніми рядками. "
@@ -331,7 +335,7 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
 
         await processing_msg.edit_text(
             _matrix_result_text(lang, dob, title_key, reply_text),
-            reply_markup=matrix_upsell_kb(lang),
+            reply_markup=matrix_upsell_kb(lang, opened_channel=channel),
             parse_mode="HTML",
         )
         
@@ -413,7 +417,15 @@ async def matrix_close_handler(callback: CallbackQuery, db: firestore.Client, st
     
     # Прибираємо кнопку Назад, залишаємо канали
     try:
-        await callback.message.edit_reply_markup(reply_markup=matrix_upsell_kb(lang, hide_back=True))
+        keyboard = callback.message.reply_markup
+        rows = [
+            [button for button in row if button.callback_data != CB_MATRIX_CLOSE]
+            for row in keyboard.inline_keyboard
+        ] if keyboard else []
+        rows = [row for row in rows if row]
+        await callback.message.edit_reply_markup(
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+        )
     except Exception:
         pass
         

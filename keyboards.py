@@ -51,11 +51,12 @@ def back_to_menu_kb(lang: str = "uk") -> InlineKeyboardMarkup:
     )
 
 
-def matrix_upsell_kb(lang: str = "uk", hide_back: bool = False) -> InlineKeyboardMarkup:
-    kb = [
-        [InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE)],
-        [InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE)]
-    ]
+def matrix_upsell_kb(lang: str = "uk", hide_back: bool = False, opened_channel: str | None = None) -> InlineKeyboardMarkup:
+    kb = []
+    if opened_channel != "finance":
+        kb.append([InlineKeyboardButton(text=get_text(lang, "matrix_btn_finance"), callback_data=CB_MATRIX_FINANCE)])
+    if opened_channel != "love":
+        kb.append([InlineKeyboardButton(text=get_text(lang, "matrix_btn_love"), callback_data=CB_MATRIX_LOVE)])
     if not hide_back:
         kb.append([InlineKeyboardButton(text=get_text(lang, "btn_back"), callback_data=CB_MATRIX_CLOSE)])
     return InlineKeyboardMarkup(inline_keyboard=kb)
