@@ -6,11 +6,11 @@ from lexicon import get_text
 
 
 def is_disposable_menu_text(text: str | None) -> bool:
-    return bool(text and text.strip() in {
+    return bool(text and text.strip() in ({"Головне меню:", "Main Menu:", "Главное меню:"} | {
         get_text(lang, key)
         for lang in ("uk", "en", "ru")
         for key in ("main_menu_title", "more_action_btn")
-    })
+    }))
 
 
 async def send_next_screen(message: Message, text: str, keyboard: InlineKeyboardMarkup, *, delete_previous: bool = False) -> Message:

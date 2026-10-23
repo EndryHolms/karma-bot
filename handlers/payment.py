@@ -140,7 +140,7 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
 
     elif payload.startswith("matrix:"):
         from handlers.matrix import execute_matrix_upsell
-        from utils.matrix_context import parse_matrix_context
+        from utils.matrix_context import parse_matrix_context, opened_matrix_channels
         from utils.matrix_math import calculate_matrix
         parts = payload.split(":")
         channel = parts[1]
@@ -150,11 +150,14 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
         dob = data.get("dob")
         matrix = data.get("matrix")
         matrix_message_id = data.get("matrix_result_message_id")
-        if len(parts) == 5:
-            context = parse_matrix_context(f"matrix:{channel}:{parts[3]}:{parts[4]}")
+        opened_channels = set()
+        if len(parts) in (5, 6):
+            context_data = f"matrix:{channel}:{parts[3]}:{parts[4]}" + (f":{parts[5]}" if len(parts) == 6 else "")
+            context = parse_matrix_context(context_data)
             if context:
                 dob, matrix_message_id = context
                 matrix = calculate_matrix(dob)
+                opened_channels = opened_matrix_channels(context_data)
             else:
                 dob = None
         
@@ -167,6 +170,7 @@ async def successful_payment(message: Message, state: FSMContext, db: firestore.
         await execute_matrix_upsell(
             message.from_user.id, message, channel, dob, matrix, db, tarot_model, lang,
             matrix_message_id=matrix_message_id,
+            opened_channels=opened_channels,
         )
         return
 

@@ -19,7 +19,7 @@ from lexicon import get_text
 from utils.matrix_math import calculate_matrix
 from utils.matrix_image import generate_matrix_image
 from utils.navigation import send_next_screen
-from utils.matrix_context import parse_matrix_context
+from utils.matrix_context import parse_matrix_context, opened_matrix_channels
 from gemini_runtime import generate_content
 
 router = Router()
@@ -36,11 +36,11 @@ def _matrix_result_header(lang: str, dob: str, title_key: str) -> str:
     return f"<b>{title}</b>\n{date_label}"
 
 
-def _matrix_result_text(lang: str, dob: str, title_key: str, body: str) -> str:
+def _matrix_result_text(lang: str, dob: str, title_key: str, body: str, show_next: bool = True) -> str:
     header = "" if title_key == "matrix_result_title" else f"{_matrix_result_header(lang, dob, title_key)}\n\n"
     return (
         f"{header}{body.strip()}"
-        f"\n\n<b>{escape(get_text(lang, 'matrix_explore_next'))}</b>"
+        + (f"\n\n<b>{escape(get_text(lang, 'matrix_explore_next'))}</b>" if show_next else "")
     )
 
 
@@ -292,7 +292,7 @@ async def _process_matrix_generation(message: Message, clean_dob: str, user_id: 
         await state.set_state(None)
 
 
-async def execute_matrix_upsell(user_id: int, message: Message, channel: str, dob: str, matrix: dict, db: firestore.Client, tarot_model: Any, lang: str, matrix_message_id: int | None = None):
+async def execute_matrix_upsell(user_id: int, message: Message, channel: str, dob: str, matrix: dict, db: firestore.Client, tarot_model: Any, lang: str, matrix_message_id: int | None = None, opened_channels: set[str] | None = None):
     """
     Виконує безпосередню генерацію Upsell розбору (фінанси або стосунки).
     Викликається з handlers/matrix.py або з handlers/payment.py
@@ -347,9 +347,10 @@ async def execute_matrix_upsell(user_id: int, message: Message, channel: str, do
         if not reply_text:
             raise ValueError("Empty response from AI")
 
+        completed_channels = set(opened_channels or ()) | {channel}
         await processing_msg.edit_text(
-            _matrix_result_text(lang, dob, title_key, reply_text),
-            reply_markup=matrix_upsell_kb(lang, opened_channel=channel, dob=dob, matrix_message_id=matrix_message_id),
+            _matrix_result_text(lang, dob, title_key, reply_text, show_next=len(completed_channels) < 2),
+            reply_markup=matrix_upsell_kb(lang, opened_channels=completed_channels, dob=dob, matrix_message_id=matrix_message_id),
             parse_mode="HTML",
         )
         
@@ -392,6 +393,14 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
         matrix = calculate_matrix(dob)
         
     channel = (callback.data or "").split(":")[1]
+    opened_channels = opened_matrix_channels(callback.data or "")
+    if len((callback.data or "").split(":")) < 5 and callback.message.reply_markup:
+        available = {
+            button.callback_data.split(":")[1]
+            for row in callback.message.reply_markup.inline_keyboard for button in row
+            if button.callback_data and button.callback_data.split(":")[:2] in (["matrix", "finance"], ["matrix", "love"])
+        }
+        opened_channels = {"finance", "love"} - available
     await state.update_data(dob=dob, matrix=matrix, matrix_result_message_id=matrix_message_id)
     
     from handlers.payment import send_stars_invoice
@@ -405,7 +414,7 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
             title=get_text(lang, title_key),
             description=get_text(lang, desc_key),
             amount_stars=MATRIX_UPSELL_PRICE,
-            payload=f"matrix:{channel}:{MATRIX_UPSELL_PRICE}:{dob}:{matrix_message_id}"
+            payload=f"matrix:{channel}:{MATRIX_UPSELL_PRICE}:{dob}:{matrix_message_id}:{(1 if 'finance' in opened_channels else 0) | (2 if 'love' in opened_channels else 0)}"
         )
         return
         
@@ -418,6 +427,7 @@ async def handle_matrix_upsell(callback: CallbackQuery, state: FSMContext, db: f
     await execute_matrix_upsell(
         user_id, callback.message, channel, dob, matrix, db, tarot_model, lang,
         matrix_message_id=matrix_message_id,
+        opened_channels=opened_channels,
     )
     await callback.answer()
 
@@ -440,9 +450,10 @@ async def matrix_close_handler(callback: CallbackQuery, db: firestore.Client, st
             for row in callback.message.reply_markup.inline_keyboard for button in row
             if button.callback_data and button.callback_data.split(":")[:2] in (["matrix", "finance"], ["matrix", "love"])
         }
-        opened_channel = "finance" if "finance" not in available else "love" if "love" not in available else None
+        completed_channels = {"finance", "love"} - available
+        keyboard = matrix_upsell_kb(lang, hide_back=True, opened_channels=completed_channels, dob=context[0], matrix_message_id=context[1])
         await callback.message.edit_reply_markup(
-            reply_markup=matrix_upsell_kb(lang, hide_back=True, opened_channel=opened_channel, dob=context[0], matrix_message_id=context[1]),
+            reply_markup=keyboard if keyboard.inline_keyboard else None,
         )
     else:
         await _retire_matrix_menu(callback.message)
