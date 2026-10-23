@@ -499,6 +499,10 @@ async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, st
     doc = db.collection("users").document(user_id).get()
     lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
 
+    state_data = await state.get_data()
+    is_matrix_prompt = bool(
+        callback.message and state_data.get("matrix_date_prompt_id") == callback.message.message_id
+    )
     await release_ai_action_lock(db, callback.from_user.id)
     await state.clear()
 
@@ -513,7 +517,7 @@ async def back_to_menu_handler(callback: CallbackQuery, db: firestore.Client, st
         ))
         await send_next_screen(
             callback.message, text, kb,
-            delete_previous=is_profile or callback.data == CB_READING_CANCEL,
+            delete_previous=is_profile or is_matrix_prompt or callback.data == CB_READING_CANCEL,
         )
     await callback.answer()
 
@@ -567,6 +571,8 @@ async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, stat
     doc = db.collection("users").document(user_id).get()
     lang = doc.to_dict().get("language", "uk") if doc.exists else "uk"
 
+    state_data = await state.get_data()
+    is_matrix_prompt = state_data.get("matrix_date_prompt_id") == callback.message.message_id
     await state.clear()
     await release_ai_action_lock(db, callback.from_user.id)
     
@@ -574,7 +580,7 @@ async def close_menu_handler(callback: CallbackQuery, db: firestore.Client, stat
     kb = main_menu_kb(lang)
 
     if callback.message:
-        await send_next_screen(callback.message, text, kb)
+        await send_next_screen(callback.message, text, kb, delete_previous=is_matrix_prompt)
     await callback.answer()
 
 @router.message(F.text, StateFilter(None))
