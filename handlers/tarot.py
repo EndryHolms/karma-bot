@@ -36,6 +36,7 @@ from keyboards import CB_CAREER, CB_DAILY, CB_RELATIONSHIP, CB_READING_CANCEL, b
 from lexicon import get_text
 from gemini_runtime import GEMINI_TIMEOUT_SECONDS, generate_content
 from utils.navigation import send_next_screen
+from utils.brand_images import brand_photo
 
 router = Router()
 
@@ -50,24 +51,6 @@ SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
-
-IMAGES_DAILY = {
-    "uk": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png",
-    "en": "https://i.postimg.cc/jS1x5Z4t/b_A_richly_detailed_Ta_1_en.png",
-    "ru": "https://i.postimg.cc/FHKrfNp0/b_A_richly_detailed_Ta_1.png",
-}
-
-IMAGES_LOVE = {
-    "uk": "https://i.postimg.cc/xTZP1Png/b_A_richly_detailed_Ta_2.png",
-    "en": "https://i.postimg.cc/wMFHdVjn/b_A_richly_detailed_Ta_2_en.png",
-    "ru": "https://i.postimg.cc/nrTZtkh6/b_A_richly_detailed_Ta_2_ru.png",
-}
-
-IMAGES_CAREER = {
-    "uk": "https://i.postimg.cc/pdfQkb8Z/b_A_richly_detailed_Ta_3.png",
-    "en": "https://i.postimg.cc/nzGfvkBT/b_A_richly_detailed_Ta_3_en.png",
-    "ru": "https://i.postimg.cc/rmN2SJxQ/b_A_richly_detailed_Ta_3_ru.png",
 }
 
 _REFERRAL_BONUS_NOTICE = {
@@ -293,7 +276,7 @@ async def daily_card(callback: CallbackQuery, db: firestore.Client, tarot_model:
         await msg.delete()
 
         if text:
-            current_img = IMAGES_DAILY.get(lang, IMAGES_DAILY["uk"])
+            current_img = brand_photo("daily", lang)
             await callback.message.answer_photo(photo=current_img, caption=get_text(lang, "daily_energy_here"), parse_mode="HTML")
             await _send_long(callback.message, text, reply_markup=main_menu_kb(lang), lang=lang)
             await log_chat_message(db, callback.from_user.id, "bot", text)
@@ -416,8 +399,7 @@ async def reading_context_message(message: Message, state: FSMContext, db: fires
         await state.clear()
         return
 
-    img_dict = IMAGES_LOVE if reading_key == "relationship" else IMAGES_CAREER
-    img_to_send = img_dict.get(lang, img_dict["uk"])
+    img_to_send = brand_photo("relationship" if reading_key == "relationship" else "career", lang)
 
     await message.answer_photo(photo=img_to_send, caption=get_text(lang, "cards_on_table"), parse_mode="HTML")
     await _send_long(message, text, reply_markup=main_menu_kb(lang), lang=lang)

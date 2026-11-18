@@ -29,6 +29,7 @@ from keyboards import (
 )
 from lexicon import get_text
 from utils.navigation import send_next_screen
+from utils.brand_images import brand_photo
 
 router = Router()
 
@@ -363,7 +364,7 @@ async def process_language_selection(callback: CallbackQuery, db: firestore.Clie
 
     user_name = html.escape(callback.from_user.first_name or "друже")
     welcome_text = get_text(lang, "welcome_text").format(name=user_name)
-    img_welcome = "https://i.postimg.cc/7hWHVtr6/Gemini_Generated_Image_y1ell9y1ell9y1el_(1).png"
+    img_welcome = brand_photo("welcome")
 
     try:
             await callback.message.answer_photo(

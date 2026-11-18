@@ -25,6 +25,7 @@ from keyboards import CB_ADVICE, back_to_menu_kb, main_menu_kb
 from lexicon import get_text
 from gemini_runtime import generate_content
 from utils.navigation import send_next_screen
+from utils.brand_images import brand_photo
 
 router = Router()
 
@@ -38,12 +39,6 @@ SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
-
-IMAGES_ADVICE = {
-    "uk": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png",
-    "en": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png",
-    "ru": "https://i.postimg.cc/qvxpMPwf/b-A-richly-detailed-Ta-4.png",
 }
 
 ADVICE_HEADING_GUIDE = {
@@ -195,7 +190,7 @@ async def advice_process(message: Message, state: FSMContext, advice_model: Any,
         await state.clear()
         return
 
-    current_img = IMAGES_ADVICE.get(lang, IMAGES_ADVICE["uk"])
+    current_img = brand_photo("advice", lang)
     await message.answer_photo(photo=current_img, caption=get_text(lang, "universe_answer"), parse_mode="HTML")
 
     await message.answer(text, parse_mode="HTML")
