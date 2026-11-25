@@ -928,7 +928,7 @@ async def _get_or_generate_horoscope_payload(
         )
 
         try:
-            response = await generate_content(model, prompt)
+            response = await generate_content(model, prompt, allow_fallback=False)
             raw_text = getattr(response, "text", "").strip()
             if not raw_text:
                 raise ValueError("Gemini returned empty batch text")

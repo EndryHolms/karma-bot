@@ -26,7 +26,7 @@ from handlers.tarot import router as tarot_router
 from handlers.matrix import router as matrix_router
 from middleware import ChatLoggingMiddleware, ThrottlingMiddleware
 from utils.menu_lifecycle import MainMenuLifecycleMiddleware
-from gemini_runtime import memory_maintenance
+from gemini_runtime import memory_maintenance, register_fallback_model
 from notifications import (
     prepare_daily_horoscope,
     send_daily_horoscope,
@@ -84,10 +84,15 @@ async def main() -> None:
         system_instruction=KARMA_SYSTEM_PROMPT,
     )
     fallback_model = None
+    advice_fallback_model = None
     if settings.fallback_model_name and settings.fallback_model_name != model_name:
         fallback_model = genai.GenerativeModel(
             model_name=settings.fallback_model_name,
             system_instruction=KARMA_SYSTEM_PROMPT,
+        )
+        advice_fallback_model = genai.GenerativeModel(
+            model_name=settings.fallback_model_name,
+            system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
         )
     logging.info(
         "Gemini models configured primary=%s fallback=%s",
@@ -100,6 +105,8 @@ async def main() -> None:
         model_name=model_name,
         system_instruction=UNIVERSE_ADVICE_SYSTEM_PROMPT,
     )
+    register_fallback_model(tarot_model, fallback_model)
+    register_fallback_model(advice_model, advice_fallback_model)
 
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     bot.session.middleware(MainMenuLifecycleMiddleware(db))
